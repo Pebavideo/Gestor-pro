@@ -1,25 +1,34 @@
 # Gestor de Empresas Pro
 
 ## Overview
-Financial management dashboard for businesses. Multi-user system with role-based permissions (Admin/Operator). Built with React + Express + PostgreSQL.
+Financial management dashboard for businesses. Multi-user system with role-based permissions (Admin/Operator). Built with React + Express + PostgreSQL. All UI in Portuguese.
 
 ## Recent Changes
-- 2026-02-07: Added multi-user authentication via Replit Auth (OIDC)
+- 2026-02-07: Replaced Replit Auth with custom email/password authentication
+- 2026-02-07: Added email verification flow (6-digit code, printed to console for testing)
 - 2026-02-07: Added role system: Admin (full access) and Operator (create only)
 - 2026-02-07: Data isolation per user (transactions and settings)
-- 2026-02-07: First user to log in is automatically promoted to Admin
+- 2026-02-07: First verified user to log in is automatically promoted to Admin
+- 2026-02-07: Translated entire UI to Portuguese
 
 ## Architecture
 - **Frontend**: React + Vite + TailwindCSS + shadcn/ui
-- **Backend**: Express.js with Replit Auth (OIDC/Passport)
+- **Backend**: Express.js with custom session-based auth
 - **Database**: PostgreSQL via Drizzle ORM
-- **Auth**: Replit Auth via OpenID Connect
+- **Auth**: Custom email/password with bcrypt hashing + email verification codes
 
 ### Key Tables
-- `users`: id (varchar), email, firstName, lastName, role ('admin'|'operator')
+- `users`: id (varchar UUID), email (unique), firstName, lastName, passwordHash, emailVerified, verificationCode, verificationCodeExpiresAt, role ('admin'|'operator'), createdAt, updatedAt
 - `transactions`: id (serial), description, amount (cents), type, userId, date
 - `settings`: id (serial), userId (unique), taxRate
-- `sessions`: sid, sess, expire (for auth sessions)
+- `sessions`: sid, sess, expire (for express-session with connect-pg-simple)
+
+### Auth Flow
+1. User registers with email, password, name
+2. 6-digit verification code is generated (printed to server console for testing)
+3. User enters code to verify email
+4. Once verified, user can access the dashboard
+5. First verified user is auto-promoted to Admin
 
 ### Roles
 - **Admin**: Can create transactions, delete transactions, update tax settings
@@ -27,15 +36,22 @@ Financial management dashboard for businesses. Multi-user system with role-based
 
 ### Data Isolation
 - Each user sees only their own transactions and settings
-- First user to register is auto-promoted to Admin
+- First user to register and verify is auto-promoted to Admin
 
 ## Project Structure
-- `client/src/` - React frontend
-- `server/` - Express backend
-- `server/replit_integrations/auth/` - Replit Auth integration (DO NOT MODIFY)
+- `client/src/` - React frontend (all Portuguese)
+- `client/src/pages/AuthPage.tsx` - Login/Register/Verify unified auth page
+- `client/src/pages/Dashboard.tsx` - Main financial dashboard
+- `server/auth.ts` - Custom authentication module (session, routes, middleware)
+- `server/routes.ts` - Business API routes
+- `server/storage.ts` - Database storage layer
 - `shared/schema.ts` - Drizzle schema + types
+- `shared/models/auth.ts` - Users and sessions table definitions
 - `shared/routes.ts` - API contract definitions
-- `shared/models/auth.ts` - Auth-related schema (DO NOT MODIFY)
+
+## Environment Variables
+- `SESSION_SECRET` - Required for session encryption
+- `DATABASE_URL` - PostgreSQL connection string
 
 ## Running
 - `npm run dev` starts Express + Vite on port 5000

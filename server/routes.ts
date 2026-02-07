@@ -3,18 +3,27 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
-import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
-
-function getUserId(req: Request): string {
-  return (req.user as any)?.claims?.sub;
-}
+import { setupAuth, registerAuthRoutes, isAuthenticated, getUserId } from "./auth";
 
 async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const userId = getUserId(req);
-  if (!userId) return res.status(401).json({ message: "Unauthorized" });
+  if (!userId) return res.status(401).json({ message: "Nao autenticado." });
   const role = await storage.getUserRole(userId);
   if (role !== "admin") {
-    return res.status(403).json({ message: "Acesso negado. Apenas administradores podem realizar esta ação." });
+    return res.status(403).json({ message: "Acesso negado. Apenas administradores podem realizar esta acao." });
+  }
+  next();
+}
+
+async function requireVerified(req: Request, res: Response, next: NextFunction) {
+  const userId = getUserId(req);
+  if (!userId) return res.status(401).json({ message: "Nao autenticado." });
+  const { db } = await import("./db");
+  const { users } = await import("@shared/schema");
+  const { eq } = await import("drizzle-orm");
+  const [user] = await db.select().from(users).where(eq(users.id, userId));
+  if (!user || !user.emailVerified) {
+    return res.status(403).json({ message: "E-mail nao verificado." });
   }
   next();
 }
@@ -24,16 +33,16 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
-  await setupAuth(app);
+  setupAuth(app);
   registerAuthRoutes(app);
 
-  app.get(api.transactions.list.path, isAuthenticated, async (req, res) => {
+  app.get(api.transactions.list.path, isAuthenticated, requireVerified, async (req, res) => {
     const userId = getUserId(req);
     const transactions = await storage.getTransactions(userId);
     res.json(transactions);
   });
 
-  app.post(api.transactions.create.path, isAuthenticated, async (req, res) => {
+  app.post(api.transactions.create.path, isAuthenticated, requireVerified, async (req, res) => {
     try {
       const userId = getUserId(req);
       const input = api.transactions.create.input.parse(req.body);
@@ -50,23 +59,23 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.transactions.delete.path, isAuthenticated, requireAdmin, async (req, res) => {
-    const id = parseInt(req.params.id);
-    if (isNaN(id)) return res.status(404).json({ message: "Invalid ID" });
+  app.delete(api.transactions.delete.path, isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id as string);
+    if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
     
     const userId = getUserId(req);
     const deleted = await storage.deleteTransaction(id, userId);
-    if (!deleted) return res.status(404).json({ message: "Transação não encontrada" });
+    if (!deleted) return res.status(404).json({ message: "Transacao nao encontrada" });
     res.status(204).send();
   });
 
-  app.get(api.settings.get.path, isAuthenticated, async (req, res) => {
+  app.get(api.settings.get.path, isAuthenticated, requireVerified, async (req, res) => {
     const userId = getUserId(req);
     const settings = await storage.getSettings(userId);
     res.json(settings);
   });
 
-  app.patch(api.settings.update.path, isAuthenticated, requireAdmin, async (req, res) => {
+  app.patch(api.settings.update.path, isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
     try {
       const userId = getUserId(req);
       const input = api.settings.update.input.parse(req.body);
@@ -83,7 +92,7 @@ export async function registerRoutes(
     }
   });
 
-  app.get(api.summary.get.path, isAuthenticated, async (req, res) => {
+  app.get(api.summary.get.path, isAuthenticated, requireVerified, async (req, res) => {
     const userId = getUserId(req);
     const transactions = await storage.getTransactions(userId);
     const settings = await storage.getSettings(userId);
@@ -112,22 +121,22 @@ export async function registerRoutes(
     });
   });
 
-  app.get("/api/user/role", isAuthenticated, async (req, res) => {
+  app.get("/api/user/role", isAuthenticated, requireVerified, async (req, res) => {
     const userId = getUserId(req);
     const role = await storage.getUserRole(userId);
     res.json({ role });
   });
 
-  app.patch("/api/user/role", isAuthenticated, requireAdmin, async (req, res) => {
+  app.patch("/api/user/role", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
     const { userId, role } = req.body;
     if (!userId || !["admin", "operator"].includes(role)) {
-      return res.status(400).json({ message: "userId e role são obrigatórios" });
+      return res.status(400).json({ message: "userId e role sao obrigatorios" });
     }
     await storage.setUserRole(userId, role);
     res.json({ message: "Perfil atualizado" });
   });
 
-  app.patch("/api/user/make-admin", isAuthenticated, async (req, res) => {
+  app.patch("/api/user/make-admin", isAuthenticated, requireVerified, async (req, res) => {
     const userId = getUserId(req);
     const role = await storage.getUserRole(userId);
     if (role === "admin") {
@@ -138,7 +147,7 @@ export async function registerRoutes(
     const { users } = await import("@shared/schema");
     const { eq, sql } = await import("drizzle-orm");
 
-    const result = await db.update(users)
+    await db.update(users)
       .set({ role: "admin" })
       .where(eq(users.id, userId))
       .returning();
