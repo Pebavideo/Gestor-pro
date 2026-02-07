@@ -112,30 +112,26 @@ async function seedData() {
     
     await storage.createTransaction({
       description: "Venda de Produto A",
-      amount: 150000, // 1500.00 * 100 cents
+      amount: 150000,
       type: "income",
-      date: new Date()
     });
     
     await storage.createTransaction({
       description: "Venda de Serviço B",
-      amount: 200000, // 2000.00 * 100
+      amount: 200000,
       type: "income",
-      date: new Date()
     });
 
     await storage.createTransaction({
       description: "Aluguel Escritório",
-      amount: 80000, // 800.00 * 100
+      amount: 80000,
       type: "expense",
-      date: new Date()
     });
 
     await storage.createTransaction({
       description: "Internet e Energia",
-      amount: 25000, // 250.00 * 100
+      amount: 25000,
       type: "expense",
-      date: new Date()
     });
   }
 }

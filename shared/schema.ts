@@ -20,7 +20,6 @@ export const insertTransactionSchema = createInsertSchema(transactions).pick({
   description: true,
   amount: true,
   type: true,
-  date: true,
 });
 
 export const insertSettingsSchema = createInsertSchema(settings).pick({

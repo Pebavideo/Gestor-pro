@@ -38,7 +38,6 @@ export function CreateTransactionDialog() {
       description: values.description,
       amount: amountInCents,
       type: values.type,
-      date: new Date(),
     }, {
       onSuccess: () => {
         setOpen(false);
