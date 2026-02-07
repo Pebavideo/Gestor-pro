@@ -3,24 +3,20 @@ import { api, buildUrl } from "@shared/routes";
 import { useToast } from "@/hooks/use-toast";
 import type { InsertTransaction, InsertSettings, Transaction, Settings } from "@shared/schema";
 
-// Helper to format currency
 export const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
   }).format(value);
 
-// ============================================
-// TRANSACTIONS
-// ============================================
-
 export function useTransactions() {
   return useQuery({
     queryKey: [api.transactions.list.path],
     queryFn: async () => {
-      const res = await fetch(api.transactions.list.path);
+      const res = await fetch(api.transactions.list.path, { credentials: "include" });
+      if (res.status === 401) return [];
       if (!res.ok) throw new Error("Failed to fetch transactions");
-      return api.transactions.list.responses[200].parse(await res.json());
+      return await res.json() as Transaction[];
     },
   });
 }
@@ -36,24 +32,25 @@ export function useCreateTransaction() {
         method: api.transactions.create.method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(validated),
+        credentials: "include",
       });
 
       if (!res.ok) {
         if (res.status === 400) {
-          const error = api.transactions.create.responses[400].parse(await res.json());
+          const error = await res.json();
           throw new Error(error.message);
         }
+        if (res.status === 401) throw new Error("Sessao expirada. Faca login novamente.");
         throw new Error("Failed to create transaction");
       }
-      return api.transactions.create.responses[201].parse(await res.json());
+      return await res.json() as Transaction;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });
       queryClient.invalidateQueries({ queryKey: [api.summary.get.path] });
       toast({
-        title: "Transação registrada",
-        description: "A movimentação foi salva com sucesso.",
-        className: "bg-green-500 text-white border-none",
+        title: "Transacao registrada",
+        description: "A movimentacao foi salva com sucesso.",
       });
     },
     onError: (error) => {
@@ -73,29 +70,35 @@ export function useDeleteTransaction() {
   return useMutation({
     mutationFn: async (id: number) => {
       const url = buildUrl(api.transactions.delete.path, { id });
-      const res = await fetch(url, { method: api.transactions.delete.method });
+      const res = await fetch(url, { method: api.transactions.delete.method, credentials: "include" });
+      if (res.status === 403) {
+        throw new Error("Apenas administradores podem excluir transacoes.");
+      }
       if (!res.ok && res.status !== 404) throw new Error("Failed to delete transaction");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });
       queryClient.invalidateQueries({ queryKey: [api.summary.get.path] });
       toast({
-        title: "Transação removida",
-        description: "O registro foi excluído permanentemente.",
+        title: "Transacao removida",
+        description: "O registro foi excluido permanentemente.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Erro",
+        description: error.message,
+        variant: "destructive",
       });
     },
   });
 }
 
-// ============================================
-// SUMMARY & SETTINGS
-// ============================================
-
 export function useSummary() {
   return useQuery({
     queryKey: [api.summary.get.path],
     queryFn: async () => {
-      const res = await fetch(api.summary.get.path);
+      const res = await fetch(api.summary.get.path, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch summary");
       return api.summary.get.responses[200].parse(await res.json());
     },
@@ -106,9 +109,9 @@ export function useSettings() {
   return useQuery({
     queryKey: [api.settings.get.path],
     queryFn: async () => {
-      const res = await fetch(api.settings.get.path);
+      const res = await fetch(api.settings.get.path, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch settings");
-      return api.settings.get.responses[200].parse(await res.json());
+      return await res.json() as Settings;
     },
   });
 }
@@ -124,17 +127,28 @@ export function useUpdateSettings() {
         method: api.settings.update.method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(validated),
+        credentials: "include",
       });
 
+      if (res.status === 403) {
+        throw new Error("Apenas administradores podem alterar configuracoes.");
+      }
       if (!res.ok) throw new Error("Failed to update settings");
-      return api.settings.update.responses[200].parse(await res.json());
+      return await res.json() as Settings;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [api.settings.get.path] });
       queryClient.invalidateQueries({ queryKey: [api.summary.get.path] });
       toast({
-        title: "Configurações atualizadas",
-        description: "A nova alíquota de imposto foi aplicada.",
+        title: "Configuracoes atualizadas",
+        description: "A nova aliquota de imposto foi aplicada.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Erro",
+        description: error.message,
+        variant: "destructive",
       });
     },
   });
