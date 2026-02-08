@@ -481,7 +481,7 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
       </div>
 
       <Dialog open={!!editTx} onOpenChange={(open) => { if (!open) setEditTx(null); }}>
-        <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Editar Transacao</DialogTitle>
             <DialogDescription>Altere os dados desta transacao.</DialogDescription>

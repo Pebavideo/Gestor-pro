@@ -170,7 +170,7 @@ export function CreateTransactionDialog() {
           <Plus className="mr-2 h-5 w-5" /> Nova Transacao
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[480px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[480px]">
         <DialogHeader className="pb-4">
           <DialogTitle className="text-2xl font-bold">Nova Transacao</DialogTitle>
           <DialogDescription>

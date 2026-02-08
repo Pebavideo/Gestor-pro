@@ -62,7 +62,7 @@ export function UserManagementDialog() {
           Gerenciar Usuarios
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl max-h-[80vh] overflow-auto">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>Gerenciar Usuarios e Acessos</DialogTitle>
         </DialogHeader>
