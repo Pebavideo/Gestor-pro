@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogScrollArea, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { UsersRound } from "lucide-react";
 import { STORE_OPTIONS, getStoreLabel } from "@shared/schema";
 import { getRoleLabel } from "@shared/models/auth";
@@ -66,28 +65,30 @@ export function UserManagementDialog() {
         <DialogHeader>
           <DialogTitle>Gerenciar Usuarios e Acessos</DialogTitle>
         </DialogHeader>
-        {isLoading ? (
-          <div className="py-8 text-center text-muted-foreground">Carregando...</div>
-        ) : allUsers.length === 0 ? (
-          <div className="py-8 text-center text-muted-foreground">Nenhum usuario encontrado.</div>
-        ) : (
-          <div className="space-y-3">
-            {allUsers.map((u) => (
-              <div
-                key={u.id}
-                className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 rounded-lg border border-border/50"
-                data-testid={`user-row-${u.id}`}
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate" data-testid={`text-user-name-${u.id}`}>
-                    {u.firstName || ""} {u.lastName || ""}
-                  </p>
-                  <p className="text-xs text-muted-foreground truncate">{u.email}</p>
-                  {!u.emailVerified && (
-                    <Badge variant="outline" className="text-[10px] mt-1 text-amber-600">Nao verificado</Badge>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
+        <DialogScrollArea className="max-h-[60vh]">
+          {isLoading ? (
+            <div className="py-8 text-center text-muted-foreground">Carregando...</div>
+          ) : allUsers.length === 0 ? (
+            <div className="py-8 text-center text-muted-foreground">Nenhum usuario encontrado.</div>
+          ) : (
+            <div className="space-y-1.5 pb-4">
+              {allUsers.map((u) => (
+                <div
+                  key={u.id}
+                  className="flex items-center gap-2 p-2 rounded-md border border-border/50"
+                  data-testid={`user-row-${u.id}`}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium truncate" data-testid={`text-user-name-${u.id}`}>
+                        {u.firstName || ""} {u.lastName || ""}
+                      </p>
+                      {!u.emailVerified && (
+                        <Badge variant="outline" className="text-[10px] text-amber-600 shrink-0">N/V</Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                  </div>
                   <Select
                     value={u.role}
                     onValueChange={(newRole) => {
@@ -95,7 +96,7 @@ export function UserManagementDialog() {
                       updateUserRole(u.id, newRole, newStore);
                     }}
                   >
-                    <SelectTrigger className="w-[130px]" data-testid={`select-role-${u.id}`}>
+                    <SelectTrigger className="w-[120px] shrink-0" data-testid={`select-role-${u.id}`}>
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -104,14 +105,14 @@ export function UserManagementDialog() {
                       <SelectItem value="operador">Operador</SelectItem>
                     </SelectContent>
                   </Select>
-                  {u.role !== "master" && (
+                  {u.role !== "master" ? (
                     <Select
                       value={u.store || "none"}
                       onValueChange={(newStore) => {
                         updateUserRole(u.id, u.role, newStore === "none" ? null : newStore);
                       }}
                     >
-                      <SelectTrigger className="w-[160px]" data-testid={`select-store-${u.id}`}>
+                      <SelectTrigger className="w-[150px] shrink-0" data-testid={`select-store-${u.id}`}>
                         <SelectValue placeholder="Unidade..." />
                       </SelectTrigger>
                       <SelectContent>
@@ -123,12 +124,14 @@ export function UserManagementDialog() {
                         ))}
                       </SelectContent>
                     </Select>
+                  ) : (
+                    <div className="w-[150px] shrink-0" />
                   )}
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
+              ))}
+            </div>
+          )}
+        </DialogScrollArea>
       </DialogContent>
     </Dialog>
   );

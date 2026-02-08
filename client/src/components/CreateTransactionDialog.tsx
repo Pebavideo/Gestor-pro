@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogScrollArea, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -171,334 +171,329 @@ export function CreateTransactionDialog() {
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[480px]">
-        <DialogHeader className="pb-4">
-          <DialogTitle className="text-2xl font-bold">Nova Transacao</DialogTitle>
+        <DialogHeader>
+          <DialogTitle className="text-xl font-bold">Nova Transacao</DialogTitle>
           <DialogDescription>
             Registre uma entrada ou saida financeira.
           </DialogDescription>
         </DialogHeader>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
-            <FormField
-              control={form.control}
-              name="type"
-              render={({ field }) => (
-                <FormItem className="space-y-3">
-                  <FormControl>
-                    <RadioGroup
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                      className="grid grid-cols-2 gap-4"
-                    >
-                      <div>
-                        <RadioGroupItem value="income" id="income" className="peer sr-only" />
-                        <TypeLabel
-                          htmlFor="income"
-                          icon={ArrowUpCircle}
-                          title="Entrada"
-                          description="Vendas, servicos..."
-                          colorClass="peer-data-[state=checked]:border-emerald-500 peer-data-[state=checked]:bg-emerald-50 peer-data-[state=checked]:text-emerald-700 text-emerald-600"
-                        />
-                      </div>
-                      <div>
-                        <RadioGroupItem value="expense" id="expense" className="peer sr-only" />
-                        <TypeLabel
-                          htmlFor="expense"
-                          icon={ArrowDownCircle}
-                          title="Saida"
-                          description="Custos, despesas..."
-                          colorClass="peer-data-[state=checked]:border-rose-500 peer-data-[state=checked]:bg-rose-50 peer-data-[state=checked]:text-rose-700 text-rose-600"
-                        />
-                      </div>
-                    </RadioGroup>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="status"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="flex items-center gap-2">
-                    <CalendarClock className="h-4 w-4" />
-                    Status
-                  </FormLabel>
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger data-testid="select-status">
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="pago" data-testid="option-status-pago">Pago/Recebido</SelectItem>
-                      <SelectItem value="pendente" data-testid="option-status-pendente">Pendente/Agendado</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {watchStatus === "pendente" && (
+        <DialogScrollArea>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-3 pb-4">
               <FormField
                 control={form.control}
-                name="dueDate"
+                name="type"
                 render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Data de Vencimento</FormLabel>
+                  <FormItem className="space-y-2">
                     <FormControl>
-                      <Input
-                        type="date"
-                        {...field}
-                        data-testid="input-due-date"
-                      />
+                      <RadioGroup
+                        onValueChange={field.onChange}
+                        defaultValue={field.value}
+                        className="grid grid-cols-2 gap-3"
+                      >
+                        <div>
+                          <RadioGroupItem value="income" id="income" className="peer sr-only" />
+                          <TypeLabel
+                            htmlFor="income"
+                            icon={ArrowUpCircle}
+                            title="Entrada"
+                            colorClass="peer-data-[state=checked]:border-emerald-500 peer-data-[state=checked]:bg-emerald-50 peer-data-[state=checked]:text-emerald-700 text-emerald-600"
+                          />
+                        </div>
+                        <div>
+                          <RadioGroupItem value="expense" id="expense" className="peer sr-only" />
+                          <TypeLabel
+                            htmlFor="expense"
+                            icon={ArrowDownCircle}
+                            title="Saida"
+                            colorClass="peer-data-[state=checked]:border-rose-500 peer-data-[state=checked]:bg-rose-50 peer-data-[state=checked]:text-rose-700 text-rose-600"
+                          />
+                        </div>
+                      </RadioGroup>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            )}
 
-            {watchStatus === "pago" && (
-              <FormField
-                control={form.control}
-                name="paymentDate"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Data de Pagamento (opcional)</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="date"
-                        {...field}
-                        data-testid="input-payment-date"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            {isMaster ? (
-              <FormField
-                control={form.control}
-                name="store"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Loja / Origem</FormLabel>
-                    <Select value={field.value || "none"} onValueChange={field.onChange}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-store">
-                          <SelectValue placeholder="Selecionar loja..." />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="none">Nenhuma</SelectItem>
-                        {STORE_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value} data-testid={`option-store-${opt.value}`}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            ) : userStore ? (
-              <div className="space-y-2">
-                <FormLabel>Unidade</FormLabel>
-                <div className="p-2 text-sm bg-muted rounded-md" data-testid="text-assigned-store">
-                  {getStoreLabel(userStore)}
-                </div>
-              </div>
-            ) : null}
-
-            <FormField
-              control={form.control}
-              name="category"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Categoria</FormLabel>
-                  <Select value={field.value || "none"} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger data-testid="select-category">
-                        <SelectValue placeholder="Selecionar categoria..." />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="none">Nenhuma</SelectItem>
-                      {CATEGORY_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value} data-testid={`option-category-${opt.value}`}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {watchType === "income" && products.length > 0 && (
-              <FormField
-                control={form.control}
-                name="productId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Produto (opcional)</FormLabel>
-                    <Select value={field.value || "none"} onValueChange={onProductSelect}>
-                      <FormControl>
-                        <SelectTrigger data-testid="select-product">
-                          <SelectValue placeholder="Selecionar produto..." />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="none">Nenhum produto</SelectItem>
-                        {products.filter((p) => p.quantity > 0).map((p) => (
-                          <SelectItem key={p.id} value={String(p.id)} data-testid={`option-product-${p.id}`}>
-                            {p.name} ({p.quantity} un.) - {formatCurrency(p.price / 100)}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            {watchType === "income" && selectedProduct && (
-              <FormField
-                control={form.control}
-                name="productQty"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Quantidade vendida</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="number"
-                        min="1"
-                        max={selectedProduct.quantity}
-                        {...field}
-                        data-testid="input-product-qty"
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            )}
-
-            <FormField
-              control={form.control}
-              name="description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Descricao</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Ex: Aluguel da Loja do Manel" {...field} data-testid="input-transaction-description" />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="amount"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Valor (R$)</FormLabel>
-                  <FormControl>
-                    <CurrencyInput
-                      value={field.value}
-                      onChange={field.onChange}
-                      className="font-mono text-lg"
-                      data-testid="input-transaction-amount"
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Repeat className="h-4 w-4 text-muted-foreground" />
-                  <Label className="text-sm font-medium">Conta Recorrente</Label>
-                </div>
+              <div className="grid grid-cols-2 gap-3">
                 <FormField
                   control={form.control}
-                  name="isRecurring"
+                  name="description"
                   render={({ field }) => (
-                    <FormItem className="flex items-center space-y-0">
+                    <FormItem>
+                      <FormLabel>Descricao</FormLabel>
                       <FormControl>
-                        <Switch
-                          checked={field.value}
-                          onCheckedChange={field.onChange}
-                          data-testid="switch-recurring"
+                        <Input placeholder="Ex: Aluguel" {...field} data-testid="input-transaction-description" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="amount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Valor (R$)</FormLabel>
+                      <FormControl>
+                        <CurrencyInput
+                          value={field.value}
+                          onChange={field.onChange}
+                          className="font-mono"
+                          data-testid="input-transaction-amount"
                         />
                       </FormControl>
+                      <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
 
-              {watchIsRecurring && (
-                <div className="flex items-center gap-2 flex-wrap">
+              <div className="grid grid-cols-2 gap-3">
+                <FormField
+                  control={form.control}
+                  name="status"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1">
+                        <CalendarClock className="h-3.5 w-3.5" />
+                        Status
+                      </FormLabel>
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-status">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="pago" data-testid="option-status-pago">Pago/Recebido</SelectItem>
+                          <SelectItem value="pendente" data-testid="option-status-pendente">Pendente</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="category"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Categoria</FormLabel>
+                      <Select value={field.value || "none"} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-category">
+                            <SelectValue placeholder="Selecionar..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">Nenhuma</SelectItem>
+                          {CATEGORY_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value} data-testid={`option-category-${opt.value}`}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {watchStatus === "pendente" && (
+                <FormField
+                  control={form.control}
+                  name="dueDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Data de Vencimento</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} data-testid="input-due-date" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {watchStatus === "pago" && (
+                <FormField
+                  control={form.control}
+                  name="paymentDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Data de Pagamento (opcional)</FormLabel>
+                      <FormControl>
+                        <Input type="date" {...field} data-testid="input-payment-date" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
+              {isMaster ? (
+                <FormField
+                  control={form.control}
+                  name="store"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Loja / Origem</FormLabel>
+                      <Select value={field.value || "none"} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-store">
+                            <SelectValue placeholder="Selecionar loja..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">Nenhuma</SelectItem>
+                          {STORE_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value} data-testid={`option-store-${opt.value}`}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              ) : userStore ? (
+                <div className="space-y-1">
+                  <FormLabel>Unidade</FormLabel>
+                  <div className="p-2 text-sm bg-muted rounded-md" data-testid="text-assigned-store">
+                    {getStoreLabel(userStore)}
+                  </div>
+                </div>
+              ) : null}
+
+              {watchType === "income" && products.length > 0 && (
+                <div className="grid grid-cols-2 gap-3">
                   <FormField
                     control={form.control}
-                    name="recurrenceFrequency"
+                    name="productId"
                     render={({ field }) => (
-                      <FormItem className="flex-1 min-w-[120px]">
-                        <Select value={field.value || "mensal"} onValueChange={field.onChange}>
+                      <FormItem>
+                        <FormLabel>Produto (opcional)</FormLabel>
+                        <Select value={field.value || "none"} onValueChange={onProductSelect}>
                           <FormControl>
-                            <SelectTrigger data-testid="select-recurrence-frequency">
-                              <SelectValue />
+                            <SelectTrigger data-testid="select-product">
+                              <SelectValue placeholder="Selecionar..." />
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            {RECURRENCE_OPTIONS.map((opt) => (
-                              <SelectItem key={opt.value} value={opt.value}>
-                                {opt.label}
+                            <SelectItem value="none">Nenhum</SelectItem>
+                            {products.filter((p) => p.quantity > 0).map((p) => (
+                              <SelectItem key={p.id} value={String(p.id)} data-testid={`option-product-${p.id}`}>
+                                {p.name} ({p.quantity} un.)
                               </SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
+                        <FormMessage />
                       </FormItem>
                     )}
                   />
+                  {selectedProduct && (
+                    <FormField
+                      control={form.control}
+                      name="productQty"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Quantidade</FormLabel>
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="1"
+                              max={selectedProduct.quantity}
+                              {...field}
+                              data-testid="input-product-qty"
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+                </div>
+              )}
+
+              <div className="border rounded-lg p-2.5 space-y-2 bg-muted/30">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Repeat className="h-3.5 w-3.5 text-muted-foreground" />
+                    <Label className="text-sm font-medium">Recorrente</Label>
+                  </div>
                   <FormField
                     control={form.control}
-                    name="recurrenceCount"
+                    name="isRecurring"
                     render={({ field }) => (
-                      <FormItem className="w-[80px]">
+                      <FormItem className="flex items-center space-y-0">
                         <FormControl>
-                          <Input
-                            type="number"
-                            min="2"
-                            max="36"
-                            placeholder="Meses"
-                            {...field}
-                            data-testid="input-recurrence-count"
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            data-testid="switch-recurring"
                           />
                         </FormControl>
                       </FormItem>
                     )}
                   />
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">vezes</span>
                 </div>
-              )}
-            </div>
 
-          </form>
-        </Form>
+                {watchIsRecurring && (
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <FormField
+                      control={form.control}
+                      name="recurrenceFrequency"
+                      render={({ field }) => (
+                        <FormItem className="flex-1 min-w-[120px]">
+                          <Select value={field.value || "mensal"} onValueChange={field.onChange}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-recurrence-frequency">
+                                <SelectValue />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {RECURRENCE_OPTIONS.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="recurrenceCount"
+                      render={({ field }) => (
+                        <FormItem className="w-[80px]">
+                          <FormControl>
+                            <Input
+                              type="number"
+                              min="2"
+                              max="36"
+                              placeholder="Meses"
+                              {...field}
+                              data-testid="input-recurrence-count"
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <span className="text-sm text-muted-foreground whitespace-nowrap">vezes</span>
+                  </div>
+                )}
+              </div>
+
+            </form>
+          </Form>
+        </DialogScrollArea>
         <DialogFooter>
           <Button
             type="button"
@@ -522,18 +517,17 @@ export function CreateTransactionDialog() {
   );
 }
 
-function TypeLabel({ htmlFor, icon: Icon, title, description, colorClass }: any) {
+function TypeLabel({ htmlFor, icon: Icon, title, colorClass }: any) {
   return (
     <label
       htmlFor={htmlFor}
       className={cn(
-        "flex flex-col items-center justify-between rounded-xl border-2 border-muted bg-transparent p-4 cursor-pointer transition-all duration-200 h-full text-center",
+        "flex items-center justify-center gap-2 rounded-xl border-2 border-muted bg-transparent p-3 cursor-pointer transition-all duration-200 text-center",
         colorClass
       )}
     >
-      <Icon className="mb-2 h-6 w-6" />
+      <Icon className="h-5 w-5" />
       <span className="text-sm font-semibold">{title}</span>
-      <span className="text-xs opacity-70 mt-1">{description}</span>
     </label>
   );
 }

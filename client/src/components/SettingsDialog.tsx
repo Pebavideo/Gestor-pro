@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogScrollArea, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { useSettings, useUpdateSettings } from "@/hooks/use-transactions";
 import { Settings as SettingsIcon } from "lucide-react";
 
 const formSchema = z.object({
-  taxRate: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) >= 0 && parseFloat(val) <= 100, "Alíquota deve ser entre 0 e 100"),
+  taxRate: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) >= 0 && parseFloat(val) <= 100, "Aliquota deve ser entre 0 e 100"),
 });
 
 export function SettingsDialog() {
@@ -25,7 +25,6 @@ export function SettingsDialog() {
     },
   });
 
-  // Update form when data loads
   useEffect(() => {
     if (settings) {
       form.setValue("taxRate", settings.taxRate.toString());
@@ -50,43 +49,44 @@ export function SettingsDialog() {
           Configuracoes
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[400px] rounded-2xl">
+      <DialogContent className="sm:max-w-[400px]">
         <DialogHeader>
-          <DialogTitle className="font-display">Configurações</DialogTitle>
+          <DialogTitle>Configuracoes</DialogTitle>
           <DialogDescription>
-            Ajuste os parâmetros fiscais da sua empresa.
+            Ajuste os parametros fiscais da sua empresa.
           </DialogDescription>
         </DialogHeader>
 
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 pt-4">
-            <FormField
-              control={form.control}
-              name="taxRate"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Alíquota de Imposto (%)</FormLabel>
-                  <FormControl>
-                    <div className="relative">
-                      <Input 
-                        type="number" 
-                        step="0.1" 
-                        className="h-11 rounded-xl pr-8 font-mono" 
-                        {...field} 
-                      />
-                      <span className="absolute right-3 top-3 text-sm text-muted-foreground">%</span>
-                    </div>
-                  </FormControl>
-                  <FormDescription className="text-xs">
-                    Percentual aplicado sobre todas as entradas para cálculo de impostos.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-          </form>
-        </Form>
+        <DialogScrollArea>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 pb-4">
+              <FormField
+                control={form.control}
+                name="taxRate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Aliquota de Imposto (%)</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <Input
+                          type="number"
+                          step="0.1"
+                          className="pr-8 font-mono"
+                          {...field}
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">%</span>
+                      </div>
+                    </FormControl>
+                    <FormDescription className="text-xs">
+                      Percentual aplicado sobre todas as entradas para calculo de impostos.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </form>
+          </Form>
+        </DialogScrollArea>
         <DialogFooter>
           <Button
             type="button"
@@ -96,7 +96,7 @@ export function SettingsDialog() {
           >
             Cancelar
           </Button>
-          <Button 
+          <Button
             disabled={isPending}
             onClick={form.handleSubmit(onSubmit)}
             data-testid="button-submit-settings"

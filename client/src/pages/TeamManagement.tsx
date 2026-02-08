@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogScrollArea, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -295,90 +295,96 @@ export default function TeamManagement() {
                   <DialogHeader>
                     <DialogTitle>Cadastrar Funcionario</DialogTitle>
                   </DialogHeader>
-                  <Form {...createForm}>
-                    <form onSubmit={createForm.handleSubmit((d) => createMutation.mutate(d))} className="space-y-4">
-                      <FormField
-                        control={createForm.control}
-                        name="name"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Nome</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Nome completo" data-testid="input-employee-name" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={createForm.control}
-                        name="position"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Cargo</FormLabel>
-                            <FormControl>
-                              <Input placeholder="Ex: Desenvolvedor, Gerente..." data-testid="input-employee-position" {...field} />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={createForm.control}
-                        name="salary"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Salario (R$)</FormLabel>
-                            <FormControl>
-                              <CurrencyInput value={field.value} onChange={field.onChange} data-testid="input-employee-salary" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <div className="space-y-2">
-                        <Label>Tipo de Salario</Label>
-                        <Select value={salaryType} onValueChange={setSalaryType}>
-                          <SelectTrigger data-testid="select-salary-type">
-                            <SelectValue placeholder="Tipo" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="monthly" data-testid="option-salary-monthly">Mensal</SelectItem>
-                            <SelectItem value="daily" data-testid="option-salary-daily">Diaria</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Unidade</Label>
-                        {isMaster ? (
-                          <Select value={formStore} onValueChange={setFormStore}>
-                            <SelectTrigger data-testid="select-employee-store">
-                              <SelectValue placeholder="Selecione a unidade" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {STORE_OPTIONS.map((opt) => (
-                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        ) : (
-                          <p className="text-sm text-muted-foreground py-2" data-testid="text-employee-store-readonly">
-                            {getStoreLabel(userStore)}
-                          </p>
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="employee-admission-date">Data de Admissao</Label>
-                        <Input
-                          id="employee-admission-date"
-                          type="datetime-local"
-                          value={admissionDate}
-                          onChange={(e) => setAdmissionDate(e.target.value)}
-                          data-testid="input-employee-admission-date"
+                  <DialogScrollArea>
+                    <Form {...createForm}>
+                      <form onSubmit={createForm.handleSubmit((d) => createMutation.mutate(d))} className="space-y-3 pb-4">
+                        <FormField
+                          control={createForm.control}
+                          name="name"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Nome</FormLabel>
+                              <FormControl>
+                                <Input placeholder="Nome completo" data-testid="input-employee-name" {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
                         />
-                      </div>
-                    </form>
-                  </Form>
+                        <div className="grid grid-cols-2 gap-3">
+                          <FormField
+                            control={createForm.control}
+                            name="position"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Cargo</FormLabel>
+                                <FormControl>
+                                  <Input placeholder="Ex: Gerente..." data-testid="input-employee-position" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={createForm.control}
+                            name="salary"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Salario (R$)</FormLabel>
+                                <FormControl>
+                                  <CurrencyInput value={field.value} onChange={field.onChange} data-testid="input-employee-salary" />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <Label>Tipo de Salario</Label>
+                            <Select value={salaryType} onValueChange={setSalaryType}>
+                              <SelectTrigger data-testid="select-salary-type">
+                                <SelectValue placeholder="Tipo" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="monthly" data-testid="option-salary-monthly">Mensal</SelectItem>
+                                <SelectItem value="daily" data-testid="option-salary-daily">Diaria</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-1">
+                            <Label>Unidade</Label>
+                            {isMaster ? (
+                              <Select value={formStore} onValueChange={setFormStore}>
+                                <SelectTrigger data-testid="select-employee-store">
+                                  <SelectValue placeholder="Selecione..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {STORE_OPTIONS.map((opt) => (
+                                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <p className="text-sm text-muted-foreground py-2" data-testid="text-employee-store-readonly">
+                                {getStoreLabel(userStore)}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="employee-admission-date">Data de Admissao</Label>
+                          <Input
+                            id="employee-admission-date"
+                            type="datetime-local"
+                            value={admissionDate}
+                            onChange={(e) => setAdmissionDate(e.target.value)}
+                            data-testid="input-employee-admission-date"
+                          />
+                        </div>
+                      </form>
+                    </Form>
+                  </DialogScrollArea>
                   <DialogFooter>
                     <Button type="button" variant="outline" onClick={() => setCreateOpen(false)} data-testid="button-cancel-employee">
                       Cancelar
@@ -723,85 +729,91 @@ export default function TeamManagement() {
           <DialogHeader>
             <DialogTitle>Editar Funcionario</DialogTitle>
           </DialogHeader>
-          <Form {...editForm}>
-            <form
-              onSubmit={editForm.handleSubmit((d) =>
-                editingEmployee && editMutation.mutate({ id: editingEmployee.id, data: d })
-              )}
-              className="space-y-4"
-            >
-              <FormField
-                control={editForm.control}
-                name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nome</FormLabel>
-                    <FormControl>
-                      <Input data-testid="input-edit-employee-name" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
+          <DialogScrollArea>
+            <Form {...editForm}>
+              <form
+                onSubmit={editForm.handleSubmit((d) =>
+                  editingEmployee && editMutation.mutate({ id: editingEmployee.id, data: d })
                 )}
-              />
-              <FormField
-                control={editForm.control}
-                name="position"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Cargo</FormLabel>
-                    <FormControl>
-                      <Input data-testid="input-edit-employee-position" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={editForm.control}
-                name="salary"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Salario (R$)</FormLabel>
-                    <FormControl>
-                      <CurrencyInput value={field.value} onChange={field.onChange} data-testid="input-edit-employee-salary" />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="space-y-2">
-                <Label>Tipo de Salario</Label>
-                <Select value={editSalaryType} onValueChange={setEditSalaryType}>
-                  <SelectTrigger data-testid="select-edit-salary-type">
-                    <SelectValue placeholder="Tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="monthly" data-testid="option-edit-salary-monthly">Mensal</SelectItem>
-                    <SelectItem value="daily" data-testid="option-edit-salary-daily">Diaria</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Unidade</Label>
-                {isMaster ? (
-                  <Select value={editStore} onValueChange={setEditStore}>
-                    <SelectTrigger data-testid="select-edit-employee-store">
-                      <SelectValue placeholder="Selecione a unidade" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {STORE_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <p className="text-sm text-muted-foreground py-2" data-testid="text-edit-employee-store-readonly">
-                    {getStoreLabel(editStore)}
-                  </p>
-                )}
-              </div>
-            </form>
-          </Form>
+                className="space-y-3 pb-4"
+              >
+                <FormField
+                  control={editForm.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Nome</FormLabel>
+                      <FormControl>
+                        <Input data-testid="input-edit-employee-name" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <div className="grid grid-cols-2 gap-3">
+                  <FormField
+                    control={editForm.control}
+                    name="position"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Cargo</FormLabel>
+                        <FormControl>
+                          <Input data-testid="input-edit-employee-position" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={editForm.control}
+                    name="salary"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Salario (R$)</FormLabel>
+                        <FormControl>
+                          <CurrencyInput value={field.value} onChange={field.onChange} data-testid="input-edit-employee-salary" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label>Tipo de Salario</Label>
+                    <Select value={editSalaryType} onValueChange={setEditSalaryType}>
+                      <SelectTrigger data-testid="select-edit-salary-type">
+                        <SelectValue placeholder="Tipo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="monthly" data-testid="option-edit-salary-monthly">Mensal</SelectItem>
+                        <SelectItem value="daily" data-testid="option-edit-salary-daily">Diaria</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>Unidade</Label>
+                    {isMaster ? (
+                      <Select value={editStore} onValueChange={setEditStore}>
+                        <SelectTrigger data-testid="select-edit-employee-store">
+                          <SelectValue placeholder="Selecione..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {STORE_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="text-sm text-muted-foreground py-2" data-testid="text-edit-employee-store-readonly">
+                        {getStoreLabel(editStore)}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </form>
+            </Form>
+          </DialogScrollArea>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setEditingEmployee(null)} data-testid="button-cancel-edit-employee">
               Cancelar

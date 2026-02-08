@@ -11,7 +11,7 @@ import { TrendingUp, TrendingDown, Landmark, Wallet, CalendarDays, FileDown, Pri
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogScrollArea } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
 import { generateDashboardPDF, printTable, openEmailDashboard, openEmailDueAccounts } from "@/lib/pdf-generator";
@@ -494,7 +494,7 @@ export default function Dashboard() {
               {csvPreview?.length || 0} transacao(es) encontrada(s). Revise, altere categorias/tipo e confirme.
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-[400px] overflow-y-auto">
+          <DialogScrollArea className="max-h-[55vh]">
             {csvPreview && csvPreview.length > 0 && (
               <div className="hidden sm:block">
                 <Table>
@@ -593,7 +593,7 @@ export default function Dashboard() {
                 ))}
               </div>
             )}
-          </div>
+          </DialogScrollArea>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setCsvPreviewOpen(false); setCsvPreview(null); }} data-testid="button-cancel-csv-import">
               Cancelar

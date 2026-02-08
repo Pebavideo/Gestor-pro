@@ -15,7 +15,7 @@ import { generateWhatsAppMessage, openWhatsApp } from "@/lib/pdf-generator";
 import { STORE_OPTIONS, getStoreLabel } from "@shared/schema";
 import { CATEGORY_OPTIONS, getCategoryLabel, getStatusLabel } from "@shared/schema";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogScrollArea } from "@/components/ui/dialog";
 import { Card } from "@/components/ui/card";
 import type { Transaction } from "@shared/schema";
 
@@ -486,81 +486,87 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
             <DialogTitle>Editar Transacao</DialogTitle>
             <DialogDescription>Altere os dados desta transacao.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="edit-tx-description">Descricao</Label>
-              <Input
-                id="edit-tx-description"
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-                data-testid="input-edit-transaction-description"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-tx-amount">Valor (R$)</Label>
-              <CurrencyInput
-                id="edit-tx-amount"
-                value={editAmount}
-                onChange={setEditAmount}
-                data-testid="input-edit-transaction-amount"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={editStatus} onValueChange={setEditStatus}>
-                <SelectTrigger data-testid="select-edit-status">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pago">Pago/Recebido</SelectItem>
-                  <SelectItem value="pendente">Pendente/Agendado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {editStatus === "pendente" && (
-              <div className="space-y-2">
-                <Label>Data de Vencimento</Label>
-                <Input
-                  type="date"
-                  value={editDueDate}
-                  onChange={(e) => setEditDueDate(e.target.value)}
-                  data-testid="input-edit-due-date"
-                />
+          <DialogScrollArea>
+            <div className="space-y-3 pb-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="edit-tx-description">Descricao</Label>
+                  <Input
+                    id="edit-tx-description"
+                    value={editDescription}
+                    onChange={(e) => setEditDescription(e.target.value)}
+                    data-testid="input-edit-transaction-description"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="edit-tx-amount">Valor (R$)</Label>
+                  <CurrencyInput
+                    id="edit-tx-amount"
+                    value={editAmount}
+                    onChange={setEditAmount}
+                    data-testid="input-edit-transaction-amount"
+                  />
+                </div>
               </div>
-            )}
-            <div className="space-y-2">
-              <Label>Categoria</Label>
-              <Select value={editCategory} onValueChange={setEditCategory}>
-                <SelectTrigger data-testid="select-edit-category">
-                  <SelectValue placeholder="Selecionar categoria..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhuma</SelectItem>
-                  {CATEGORY_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Status</Label>
+                  <Select value={editStatus} onValueChange={setEditStatus}>
+                    <SelectTrigger data-testid="select-edit-status">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pago">Pago/Recebido</SelectItem>
+                      <SelectItem value="pendente">Pendente</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Categoria</Label>
+                  <Select value={editCategory} onValueChange={setEditCategory}>
+                    <SelectTrigger data-testid="select-edit-category">
+                      <SelectValue placeholder="Selecionar..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma</SelectItem>
+                      {CATEGORY_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              {editStatus === "pendente" && (
+                <div className="space-y-1">
+                  <Label>Data de Vencimento</Label>
+                  <Input
+                    type="date"
+                    value={editDueDate}
+                    onChange={(e) => setEditDueDate(e.target.value)}
+                    data-testid="input-edit-due-date"
+                  />
+                </div>
+              )}
+              <div className="space-y-1">
+                <Label>Loja / Origem</Label>
+                <Select value={editStore} onValueChange={setEditStore}>
+                  <SelectTrigger data-testid="select-edit-store">
+                    <SelectValue placeholder="Selecionar loja..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhuma</SelectItem>
+                    {STORE_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Loja / Origem</Label>
-              <Select value={editStore} onValueChange={setEditStore}>
-                <SelectTrigger data-testid="select-edit-store">
-                  <SelectValue placeholder="Selecionar loja..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhuma</SelectItem>
-                  {STORE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
+          </DialogScrollArea>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditTx(null)} data-testid="button-cancel-edit-transaction">
               Cancelar

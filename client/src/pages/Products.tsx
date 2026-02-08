@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogScrollArea } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Plus, Package, Pencil, Trash2, PackageOpen, ShoppingBag, Clock, ArrowDownCircle } from "lucide-react";
 import { format } from "date-fns";
@@ -455,59 +455,63 @@ export default function Products() {
             <DialogTitle>Novo Produto</DialogTitle>
             <DialogDescription>Cadastre um novo produto no estoque.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="create-product-name">Nome</Label>
-              <Input id="create-product-name" value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="Ex: Parafuso, Cimento, Cabo" data-testid="input-product-name" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="create-product-spec">Especificacao / Tamanho</Label>
-              <Input id="create-product-spec" value={formSpecification} onChange={(e) => setFormSpecification(e.target.value)} placeholder="Ex: 1cm, 80cm, 50kg, Azul" data-testid="input-product-specification" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Unidade</Label>
-                <Select value={formUnit} onValueChange={setFormUnit} data-testid="select-product-unit">
-                  <SelectTrigger data-testid="select-product-unit-trigger">
-                    <SelectValue />
+          <DialogScrollArea>
+            <div className="space-y-3 pb-4">
+              <div className="space-y-1">
+                <Label htmlFor="create-product-name">Nome</Label>
+                <Input id="create-product-name" value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="Ex: Parafuso, Cimento, Cabo" data-testid="input-product-name" />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="create-product-spec">Especificacao / Tamanho</Label>
+                <Input id="create-product-spec" value={formSpecification} onChange={(e) => setFormSpecification(e.target.value)} placeholder="Ex: 1cm, 80cm, 50kg, Azul" data-testid="input-product-specification" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Unidade</Label>
+                  <Select value={formUnit} onValueChange={setFormUnit} data-testid="select-product-unit">
+                    <SelectTrigger data-testid="select-product-unit-trigger">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {UNIT_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value} data-testid={`select-unit-${opt.value}`}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="create-product-qty">Quantidade</Label>
+                  <Input id="create-product-qty" type="number" min="0" value={formQuantity} onChange={(e) => setFormQuantity(e.target.value)} placeholder="0" data-testid="input-product-quantity" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>Loja / Origem</Label>
+                <Select value={formStore} onValueChange={setFormStore}>
+                  <SelectTrigger data-testid="select-product-store">
+                    <SelectValue placeholder="Selecionar loja..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {UNIT_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value} data-testid={`select-unit-${opt.value}`}>{opt.label}</SelectItem>
+                    <SelectItem value="none">Nenhuma</SelectItem>
+                    {STORE_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value} data-testid={`select-product-store-${opt.value}`}>
+                        {opt.label}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="create-product-qty">Quantidade</Label>
-                <Input id="create-product-qty" type="number" min="0" value={formQuantity} onChange={(e) => setFormQuantity(e.target.value)} placeholder="0" data-testid="input-product-quantity" />
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label htmlFor="create-product-price">Preco Sugerido (R$)</Label>
+                  <CurrencyInput id="create-product-price" value={formPrice} onChange={setFormPrice} data-testid="input-product-price" />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="create-product-date">Data/Hora Entrada</Label>
+                  <Input id="create-product-date" type="datetime-local" value={formDate} onChange={(e) => setFormDate(e.target.value)} data-testid="input-product-date" />
+                </div>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Loja / Origem</Label>
-              <Select value={formStore} onValueChange={setFormStore}>
-                <SelectTrigger data-testid="select-product-store">
-                  <SelectValue placeholder="Selecionar loja..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhuma</SelectItem>
-                  {STORE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value} data-testid={`select-product-store-${opt.value}`}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="create-product-price">Preco Sugerido (R$)</Label>
-              <CurrencyInput id="create-product-price" value={formPrice} onChange={setFormPrice} data-testid="input-product-price" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="create-product-date">Data e Hora de Entrada</Label>
-              <Input id="create-product-date" type="datetime-local" value={formDate} onChange={(e) => setFormDate(e.target.value)} data-testid="input-product-date" />
-            </div>
-          </div>
+          </DialogScrollArea>
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
             <Button onClick={submitCreate} disabled={createMutation.isPending || !formName.trim() || !formPrice} data-testid="button-submit-product">
@@ -523,55 +527,59 @@ export default function Products() {
             <DialogTitle>Editar Produto</DialogTitle>
             <DialogDescription>Altere os dados do produto.</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="edit-product-name">Nome</Label>
-              <Input id="edit-product-name" value={formName} onChange={(e) => setFormName(e.target.value)} data-testid="input-edit-product-name" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-product-spec">Especificacao / Tamanho</Label>
-              <Input id="edit-product-spec" value={formSpecification} onChange={(e) => setFormSpecification(e.target.value)} placeholder="Ex: 1cm, 80cm, 50kg, Azul" data-testid="input-edit-product-specification" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Unidade</Label>
-                <Select value={formUnit} onValueChange={setFormUnit}>
-                  <SelectTrigger data-testid="select-edit-product-unit-trigger">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {UNIT_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+          <DialogScrollArea>
+            <div className="space-y-3 pb-4">
+              <div className="space-y-1">
+                <Label htmlFor="edit-product-name">Nome</Label>
+                <Input id="edit-product-name" value={formName} onChange={(e) => setFormName(e.target.value)} data-testid="input-edit-product-name" />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-product-qty">Quantidade</Label>
-                <Input id="edit-product-qty" type="number" min="0" value={formQuantity} onChange={(e) => setFormQuantity(e.target.value)} data-testid="input-edit-product-quantity" />
+              <div className="space-y-1">
+                <Label htmlFor="edit-product-spec">Especificacao / Tamanho</Label>
+                <Input id="edit-product-spec" value={formSpecification} onChange={(e) => setFormSpecification(e.target.value)} placeholder="Ex: 1cm, 80cm, 50kg, Azul" data-testid="input-edit-product-specification" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Unidade</Label>
+                  <Select value={formUnit} onValueChange={setFormUnit}>
+                    <SelectTrigger data-testid="select-edit-product-unit-trigger">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {UNIT_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="edit-product-qty">Quantidade</Label>
+                  <Input id="edit-product-qty" type="number" min="0" value={formQuantity} onChange={(e) => setFormQuantity(e.target.value)} data-testid="input-edit-product-quantity" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Loja / Origem</Label>
+                  <Select value={formStore} onValueChange={setFormStore}>
+                    <SelectTrigger data-testid="select-edit-product-store">
+                      <SelectValue placeholder="Selecionar loja..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma</SelectItem>
+                      {STORE_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="edit-product-price">Preco Sugerido (R$)</Label>
+                  <CurrencyInput id="edit-product-price" value={formPrice} onChange={setFormPrice} data-testid="input-edit-product-price" />
+                </div>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Loja / Origem</Label>
-              <Select value={formStore} onValueChange={setFormStore}>
-                <SelectTrigger data-testid="select-edit-product-store">
-                  <SelectValue placeholder="Selecionar loja..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">Nenhuma</SelectItem>
-                  {STORE_OPTIONS.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-product-price">Preco Sugerido (R$)</Label>
-              <CurrencyInput id="edit-product-price" value={formPrice} onChange={setFormPrice} data-testid="input-edit-product-price" />
-            </div>
-          </div>
+          </DialogScrollArea>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditProduct(null)}>Cancelar</Button>
             <Button onClick={submitEdit} disabled={updateMutation.isPending || !formName.trim() || !formPrice} data-testid="button-submit-edit-product">
