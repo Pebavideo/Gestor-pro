@@ -43,6 +43,16 @@
 
   --radius: 1rem;
 
+  /* Sidebar - Clean white background for visibility */
+  --sidebar: 0 0% 100%;
+  --sidebar-foreground: 222 47% 11%;
+  --sidebar-border: 214 32% 91%;
+  --sidebar-ring: 221 83% 53%;
+  --sidebar-primary: 221 83% 53%;
+  --sidebar-primary-foreground: 210 40% 98%;
+  --sidebar-accent: 210 40% 96.1%;
+  --sidebar-accent-foreground: 222 47% 11.2%;
+
   /* Custom Status Colors */
   --success: 142 71% 45%;
   --success-foreground: 138 76% 97%;
@@ -78,6 +88,16 @@
   --border: 217 32.6% 17.5%;
   --input: 217 32.6% 17.5%;
   --ring: 224.3 76.3% 48%;
+
+  /* Sidebar dark */
+  --sidebar: 222 47% 13%;
+  --sidebar-foreground: 210 40% 98%;
+  --sidebar-border: 217 32.6% 17.5%;
+  --sidebar-ring: 224.3 76.3% 48%;
+  --sidebar-primary: 217 91% 60%;
+  --sidebar-primary-foreground: 222 47.4% 11.2%;
+  --sidebar-accent: 217 32.6% 17.5%;
+  --sidebar-accent-foreground: 210 40% 98%;
 }
 
 @layer base {

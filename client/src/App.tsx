@@ -26,6 +26,7 @@ import {
   SidebarMenuItem,
   SidebarProvider,
   SidebarTrigger,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { Layers, LayoutDashboard, Users, Package, LogOut, BarChart3 } from "lucide-react";
 import { SettingsDialog } from "@/components/SettingsDialog";
@@ -33,7 +34,8 @@ import { useEffect } from "react";
 
 function AppSidebar() {
   const { user, isAdmin, role, logout } = useAuth();
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
+  const { isMobile, setOpenMobile } = useSidebar();
 
   const initials = user
     ? `${(user.firstName || "")[0] || ""}${(user.lastName || "")[0] || ""}`.toUpperCase() || "U"
@@ -46,6 +48,13 @@ function AppSidebar() {
     { path: "/equipe", label: "Gestao de Equipe", icon: Users, testId: "team" },
   ];
 
+  const handleNav = (path: string) => {
+    navigate(path);
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
+
   return (
     <Sidebar>
       <SidebarHeader className="p-4">
@@ -55,7 +64,7 @@ function AppSidebar() {
           </div>
           <div>
             <h1 className="text-lg font-bold leading-none" data-testid="text-app-title">Gestor Pro</h1>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Gestao Empresarial</p>
+            <p className="text-[11px] text-sidebar-foreground/60 mt-0.5">Gestao Empresarial</p>
           </div>
         </div>
       </SidebarHeader>
@@ -69,11 +78,14 @@ function AppSidebar() {
                 const isActive = location === item.path;
                 return (
                   <SidebarMenuItem key={item.path}>
-                    <SidebarMenuButton asChild isActive={isActive}>
-                      <Link href={item.path} data-testid={`nav-${item.testId}`}>
-                        <item.icon />
-                        <span>{item.label}</span>
-                      </Link>
+                    <SidebarMenuButton
+                      isActive={isActive}
+                      size="lg"
+                      onClick={() => handleNav(item.path)}
+                      data-testid={`nav-${item.testId}`}
+                    >
+                      <item.icon className="h-5 w-5" />
+                      <span className="text-base">{item.label}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );
@@ -98,7 +110,7 @@ function AppSidebar() {
               {role === "admin" ? "Admin" : "Operador"}
             </Badge>
           </div>
-          <Button variant="ghost" size="icon" onClick={() => logout()} data-testid="button-logout">
+          <Button variant="ghost" size="icon" onClick={() => { logout(); if (isMobile) setOpenMobile(false); }} data-testid="button-logout">
             <LogOut className="h-4 w-4" />
           </Button>
         </div>
