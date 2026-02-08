@@ -14,7 +14,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Users, Plus, Pencil, Trash2, Inbox, Banknote } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, Inbox, Banknote, DollarSign } from "lucide-react";
 import type { Employee } from "@shared/schema";
 
 const employeeFormSchema = z.object({
@@ -140,6 +140,26 @@ export default function TeamManagement() {
       queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
       queryClient.invalidateQueries({ queryKey: ["/api/summary"] });
       toast({ title: "Folha processada", description: data.message });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const payEmployeeMutation = useMutation({
+    mutationFn: async (employeeId: number) => {
+      const res = await fetch(`/api/employees/${employeeId}/pay`, {
+        method: "POST",
+        credentials: "include",
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message);
+      return json;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/summary"] });
+      toast({ title: "Pagamento lancado", description: data.message });
     },
     onError: (error: Error) => {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
@@ -327,14 +347,14 @@ export default function TeamManagement() {
                 <TableHead className="pl-6">Nome</TableHead>
                 <TableHead>Cargo</TableHead>
                 <TableHead className="text-right">Salario Mensal</TableHead>
-                {isAdmin && <TableHead className="w-[100px] text-right pr-6">Acoes</TableHead>}
+                {isAdmin && <TableHead className="text-right pr-6">Acoes</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {employees.map((emp) => (
                 <TableRow
                   key={emp.id}
-                  className="group hover:bg-muted/30 border-border/50 transition-colors"
+                  className="hover:bg-muted/30 border-border/50 transition-colors"
                   data-testid={`row-employee-${emp.id}`}
                 >
                   <TableCell className="pl-6">
@@ -359,7 +379,6 @@ export default function TeamManagement() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
                           onClick={() => openEdit(emp)}
                           data-testid={`button-edit-employee-${emp.id}`}
                         >
@@ -370,7 +389,37 @@ export default function TeamManagement() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="opacity-0 group-hover:opacity-100 transition-opacity"
+                              disabled={payEmployeeMutation.isPending}
+                              data-testid={`button-pay-employee-${emp.id}`}
+                            >
+                              <DollarSign className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Lancar Pagamento Individual</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Sera criado um lancamento de saida no valor de{" "}
+                                <span className="font-semibold text-foreground">{formatCurrency(emp.salary / 100)}</span>{" "}
+                                referente ao salario de <span className="font-semibold text-foreground">{emp.name}</span>.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => payEmployeeMutation.mutate(emp.id)}
+                                data-testid={`button-confirm-pay-employee-${emp.id}`}
+                              >
+                                Confirmar Pagamento
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               data-testid={`button-delete-employee-${emp.id}`}
                             >
                               <Trash2 className="h-4 w-4" />
@@ -387,7 +436,7 @@ export default function TeamManagement() {
                               <AlertDialogCancel>Cancelar</AlertDialogCancel>
                               <AlertDialogAction
                                 onClick={() => deleteMutation.mutate(emp.id)}
-                                className="bg-destructive hover:bg-destructive/90"
+                                className="bg-destructive"
                                 data-testid={`button-confirm-delete-employee-${emp.id}`}
                               >
                                 Remover

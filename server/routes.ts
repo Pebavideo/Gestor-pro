@@ -184,6 +184,15 @@ export async function registerRoutes(
     res.status(204).send();
   });
 
+  app.post("/api/employees/:id/pay", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id as string);
+    if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
+    const userId = getUserId(req);
+    const tx = await storage.processPayrollForEmployee(id, userId);
+    if (!tx) return res.status(404).json({ message: "Funcionario nao encontrado" });
+    res.status(201).json({ message: `Pagamento lancado para o funcionario.`, transaction: tx });
+  });
+
   app.post("/api/employees/payroll", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
     const userId = getUserId(req);
     const emps = await storage.getEmployees(userId);
@@ -203,22 +212,20 @@ export async function registerRoutes(
 
     const { db } = await import("./db");
     const { users } = await import("@shared/schema");
-    const { eq, sql } = await import("drizzle-orm");
+    const { eq, and, ne, sql } = await import("drizzle-orm");
+
+    const existingAdmins = await db.select({ count: sql<number>`count(*)` })
+      .from(users)
+      .where(and(eq(users.role, "admin"), ne(users.id, userId)));
+
+    if (Number(existingAdmins[0].count) > 0) {
+      return res.status(403).json({ message: "Ja existe um administrador." });
+    }
 
     await db.update(users)
       .set({ role: "admin" })
-      .where(eq(users.id, userId))
-      .returning();
-    
-    const adminCount = await db.select({ count: sql<number>`count(*)` })
-      .from(users)
-      .where(eq(users.role, "admin"));
-    
-    if (Number(adminCount[0].count) > 1) {
-      await db.update(users).set({ role: "operator" }).where(eq(users.id, userId));
-      return res.status(403).json({ message: "Ja existe um administrador." });
-    }
-    
+      .where(eq(users.id, userId));
+
     return res.json({ message: "Primeiro usuario promovido a admin", role: "admin" });
   });
 

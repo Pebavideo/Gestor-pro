@@ -25,6 +25,7 @@ export interface IStorage {
   updateEmployee(id: number, employee: Partial<InsertEmployee>, userId: string): Promise<Employee | null>;
   deleteEmployee(id: number, userId: string): Promise<boolean>;
   processPayroll(userId: string): Promise<Transaction[]>;
+  processPayrollForEmployee(employeeId: number, userId: string): Promise<Transaction | null>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -137,6 +138,22 @@ export class DatabaseStorage implements IStorage {
       created.push(tx);
     }
     return created;
+  }
+
+  async processPayrollForEmployee(employeeId: number, userId: string): Promise<Transaction | null> {
+    const [emp] = await db.select().from(employees)
+      .where(and(eq(employees.id, employeeId), eq(employees.userId, userId), eq(employees.active, 1)));
+    if (!emp) return null;
+    const [tx] = await db
+      .insert(transactions)
+      .values({
+        description: `Salario - ${emp.name}`,
+        amount: emp.salary,
+        type: "expense",
+        userId,
+      })
+      .returning();
+    return tx;
   }
 }
 
