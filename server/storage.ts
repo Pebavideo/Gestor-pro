@@ -11,6 +11,7 @@ import type { User } from "@shared/models/auth";
 export interface IStorage {
   getTransactions(userId: string): Promise<Transaction[]>;
   createTransaction(transaction: InsertTransaction, userId: string): Promise<Transaction>;
+  updateTransaction(id: number, data: Partial<InsertTransaction>, userId: string): Promise<Transaction | null>;
   deleteTransaction(id: number, userId: string): Promise<boolean>;
   getTransaction(id: number): Promise<Transaction | undefined>;
   
@@ -46,6 +47,18 @@ export class DatabaseStorage implements IStorage {
   async getTransaction(id: number): Promise<Transaction | undefined> {
     const [tx] = await db.select().from(transactions).where(eq(transactions.id, id));
     return tx;
+  }
+
+  async updateTransaction(id: number, data: Partial<InsertTransaction>, userId: string): Promise<Transaction | null> {
+    const [existing] = await db.select().from(transactions)
+      .where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
+    if (!existing) return null;
+    const [updated] = await db
+      .update(transactions)
+      .set(data)
+      .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
+      .returning();
+    return updated;
   }
 
   async deleteTransaction(id: number, userId: string): Promise<boolean> {
@@ -129,7 +142,7 @@ export class DatabaseStorage implements IStorage {
       const [tx] = await db
         .insert(transactions)
         .values({
-          description: `Salario - ${emp.name}`,
+          description: `Pagamento - ${emp.name}`,
           amount: emp.salary,
           type: "expense",
           userId,
@@ -147,7 +160,7 @@ export class DatabaseStorage implements IStorage {
     const [tx] = await db
       .insert(transactions)
       .values({
-        description: `Salario - ${emp.name}`,
+        description: `Pagamento - ${emp.name}`,
         amount: emp.salary,
         type: "expense",
         userId,

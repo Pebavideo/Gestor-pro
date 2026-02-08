@@ -63,6 +63,43 @@ export function useCreateTransaction() {
   });
 }
 
+export function useUpdateTransaction() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: Partial<InsertTransaction> }) => {
+      const res = await fetch(`/api/transactions/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      if (res.status === 403) throw new Error("Apenas administradores podem editar transacoes.");
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Erro ao atualizar transacao");
+      }
+      return await res.json() as Transaction;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.summary.get.path] });
+      toast({
+        title: "Transacao atualizada",
+        description: "Os dados foram salvos com sucesso.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Erro",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}
+
 export function useDeleteTransaction() {
   const queryClient = useQueryClient();
   const { toast } = useToast();

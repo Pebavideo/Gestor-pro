@@ -4,6 +4,9 @@
 Financial management dashboard for businesses. Multi-user system with role-based permissions (Admin/Operator). Built with React + Express + PostgreSQL. All UI in Portuguese.
 
 ## Recent Changes
+- 2026-02-08: Added month filter to Dashboard for viewing profit by specific months
+- 2026-02-08: Added transaction editing (PATCH /api/transactions/:id) with inline edit dialog
+- 2026-02-08: Fixed payroll descriptions from "Salario" to "Pagamento"
 - 2026-02-08: Added Team Management module (employees CRUD, payroll processing)
 - 2026-02-08: Added sidebar navigation (Dashboard + Team Management)
 - 2026-02-07: Replaced Replit Auth with custom email/password authentication
