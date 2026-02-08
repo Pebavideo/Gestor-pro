@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarDays, FileDown, Mail, TrendingUp, TrendingDown, ArrowDown, ArrowUp, Store } from "lucide-react";
+import { CalendarDays, FileDown, Mail, TrendingUp, TrendingDown, ArrowDown, ArrowUp, Store, Eye } from "lucide-react";
 import { generateDREPDF, openEmailDRE } from "@/lib/pdf-generator";
 import { STORE_OPTIONS, getStoreLabel } from "@/components/CreateTransactionDialog";
 import { getCategoryLabel } from "@shared/schema";
@@ -20,10 +20,12 @@ const MONTH_NAMES = [
 ];
 
 type PeriodMode = "monthly" | "quarterly" | "annual" | "custom";
+type ViewMode = "realizado" | "previsto" | "comparativo";
 
 interface DRELine {
   label: string;
   value: number;
+  previstoValue?: number;
   level: number;
   isBold?: boolean;
   isTotal?: boolean;
@@ -41,6 +43,7 @@ export default function DRE() {
   const [customFrom, setCustomFrom] = useState<string>("");
   const [customTo, setCustomTo] = useState<string>("");
   const [selectedStore, setSelectedStore] = useState<string>("all");
+  const [viewMode, setViewMode] = useState<ViewMode>("realizado");
 
   const availableYears = useMemo(() => {
     if (!transactions) return [new Date().getFullYear()];
@@ -96,24 +99,37 @@ export default function DRE() {
 
   const storeLabel = selectedStore !== "all" ? getStoreLabel(selectedStore) : null;
 
-  const filteredTransactions = useMemo(() => {
+  const filteredByStore = useMemo(() => {
     if (!transactions) return [];
     return transactions.filter((tx) => {
-      const d = new Date(tx.date);
-      if (d < dateFrom || d > dateTo) return false;
       if (selectedStore !== "all" && tx.store !== selectedStore) return false;
       return true;
     });
-  }, [transactions, dateFrom, dateTo, selectedStore]);
+  }, [transactions, selectedStore]);
 
-  const dreData = useMemo(() => {
+  const realizadoTx = useMemo(() => {
+    return filteredByStore.filter((tx) => {
+      if (tx.status !== "pago") return false;
+      const payDate = tx.paymentDate ? new Date(tx.paymentDate) : new Date(tx.date);
+      return payDate >= dateFrom && payDate <= dateTo;
+    });
+  }, [filteredByStore, dateFrom, dateTo]);
+
+  const previstoTx = useMemo(() => {
+    return filteredByStore.filter((tx) => {
+      const refDate = tx.dueDate ? new Date(tx.dueDate) : new Date(tx.date);
+      return refDate >= dateFrom && refDate <= dateTo;
+    });
+  }, [filteredByStore, dateFrom, dateTo]);
+
+  function computeDRE(txList: typeof realizadoTx) {
     const taxRate = settingsData ? parseFloat(settingsData.taxRate) || 0 : 0;
 
     let receitaBruta = 0;
     const receitaByCategory: Record<string, number> = {};
     const despesaByCategory: Record<string, number> = {};
 
-    for (const tx of filteredTransactions) {
+    for (const tx of txList) {
       const cat = tx.category || "outros";
       if (tx.type === "income") {
         receitaBruta += tx.amount;
@@ -138,32 +154,83 @@ export default function DRE() {
       lucroLiquido,
       taxRate,
     };
-  }, [filteredTransactions, settingsData]);
+  }
+
+  const dreRealizado = useMemo(() => computeDRE(realizadoTx), [realizadoTx, settingsData]);
+  const drePrevisto = useMemo(() => computeDRE(previstoTx), [previstoTx, settingsData]);
+
+  const dreData = viewMode === "previsto" ? drePrevisto : dreRealizado;
 
   const dreLines: DRELine[] = useMemo(() => {
     const lines: DRELine[] = [];
+    const isComp = viewMode === "comparativo";
+    const isPrev = viewMode === "previsto";
+    const primary = isPrev ? drePrevisto : dreRealizado;
 
-    lines.push({ label: "Receita Bruta de Vendas", value: dreData.receitaBruta, level: 0, isBold: true, color: "positive" });
+    lines.push({
+      label: "Receita Bruta de Vendas",
+      value: primary.receitaBruta,
+      previstoValue: isComp ? drePrevisto.receitaBruta : undefined,
+      level: 0, isBold: true, color: "positive",
+    });
 
-    const receitaCats = Object.entries(dreData.receitaByCategory).sort((a, b) => b[1] - a[1]);
-    for (const [cat, val] of receitaCats) {
-      lines.push({ label: getCategoryLabel(cat) || "Outros", value: val, level: 2, color: "neutral" });
+    const allReceitaCats = new Set([
+      ...Object.keys(dreRealizado.receitaByCategory),
+      ...Object.keys(drePrevisto.receitaByCategory),
+    ]);
+    for (const cat of Array.from(allReceitaCats).sort()) {
+      lines.push({
+        label: getCategoryLabel(cat) || "Outros",
+        value: isPrev ? (drePrevisto.receitaByCategory[cat] || 0) : (dreRealizado.receitaByCategory[cat] || 0),
+        previstoValue: isComp ? (drePrevisto.receitaByCategory[cat] || 0) : undefined,
+        level: 2, color: "neutral",
+      });
     }
 
-    lines.push({ label: `(-) Impostos sobre Receita (${dreData.taxRate}%)`, value: -dreData.impostos, level: 1, color: "negative" });
-    lines.push({ label: "(=) Receita Liquida", value: dreData.receitaLiquida, level: 0, isBold: true, isTotal: true, color: dreData.receitaLiquida >= 0 ? "positive" : "negative" });
+    lines.push({
+      label: `(-) Impostos sobre Receita (${primary.taxRate}%)`,
+      value: -primary.impostos,
+      previstoValue: isComp ? -drePrevisto.impostos : undefined,
+      level: 1, color: "negative",
+    });
+    lines.push({
+      label: "(=) Receita Liquida",
+      value: primary.receitaLiquida,
+      previstoValue: isComp ? drePrevisto.receitaLiquida : undefined,
+      level: 0, isBold: true, isTotal: true,
+      color: primary.receitaLiquida >= 0 ? "positive" : "negative",
+    });
 
-    lines.push({ label: "(-) Despesas Totais", value: -dreData.totalDespesas, level: 0, isBold: true, color: "negative" });
+    lines.push({
+      label: "(-) Despesas Totais",
+      value: -primary.totalDespesas,
+      previstoValue: isComp ? -drePrevisto.totalDespesas : undefined,
+      level: 0, isBold: true, color: "negative",
+    });
 
-    const despesaCats = Object.entries(dreData.despesaByCategory).sort((a, b) => b[1] - a[1]);
-    for (const [cat, val] of despesaCats) {
-      lines.push({ label: getCategoryLabel(cat) || "Outros", value: -val, level: 2, color: "neutral" });
+    const allDespesaCats = new Set([
+      ...Object.keys(dreRealizado.despesaByCategory),
+      ...Object.keys(drePrevisto.despesaByCategory),
+    ]);
+    for (const cat of Array.from(allDespesaCats).sort()) {
+      lines.push({
+        label: getCategoryLabel(cat) || "Outros",
+        value: isPrev ? -(drePrevisto.despesaByCategory[cat] || 0) : -(dreRealizado.despesaByCategory[cat] || 0),
+        previstoValue: isComp ? -(drePrevisto.despesaByCategory[cat] || 0) : undefined,
+        level: 2, color: "neutral",
+      });
     }
 
-    lines.push({ label: "(=) Lucro Liquido do Exercicio", value: dreData.lucroLiquido, level: 0, isBold: true, isTotal: true, color: dreData.lucroLiquido >= 0 ? "positive" : "negative" });
+    lines.push({
+      label: "(=) Lucro Liquido do Exercicio",
+      value: primary.lucroLiquido,
+      previstoValue: isComp ? drePrevisto.lucroLiquido : undefined,
+      level: 0, isBold: true, isTotal: true,
+      color: primary.lucroLiquido >= 0 ? "positive" : "negative",
+    });
 
     return lines;
-  }, [dreData]);
+  }, [dreRealizado, drePrevisto, viewMode]);
 
   const isLoading = txLoading || settingsLoading;
 
@@ -187,6 +254,8 @@ export default function DRE() {
   function handleEmail() {
     openEmailDRE(dreLines, filterLabel, dreExportData, storeLabel);
   }
+
+  const isComp = viewMode === "comparativo";
 
   return (
     <div className="space-y-6">
@@ -323,6 +392,40 @@ export default function DRE() {
               </Select>
             </div>
           </div>
+
+          <div className="flex items-center gap-2 border-t border-border/50 pt-3 flex-wrap">
+            <Eye className="h-4 w-4 text-muted-foreground shrink-0" />
+            <span className="text-sm text-muted-foreground shrink-0">Visao:</span>
+            <div className="flex items-center gap-1">
+              <Button
+                variant={viewMode === "realizado" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setViewMode("realizado")}
+                className="toggle-elevate"
+                data-testid="dre-btn-realizado"
+              >
+                Realizado
+              </Button>
+              <Button
+                variant={viewMode === "previsto" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setViewMode("previsto")}
+                className="toggle-elevate"
+                data-testid="dre-btn-previsto"
+              >
+                Previsto
+              </Button>
+              <Button
+                variant={viewMode === "comparativo" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setViewMode("comparativo")}
+                className="toggle-elevate"
+                data-testid="dre-btn-comparativo"
+              >
+                Previsto vs Realizado
+              </Button>
+            </div>
+          </div>
         </div>
       </Card>
 
@@ -370,9 +473,14 @@ export default function DRE() {
 
       <Card className="overflow-hidden">
         <div className="p-4 border-b border-border/50 bg-muted/30">
-          <h3 className="font-semibold text-base" data-testid="dre-table-title">
-            Demonstrativo - {filterLabel}
-          </h3>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h3 className="font-semibold text-base" data-testid="dre-table-title">
+              Demonstrativo - {filterLabel}
+            </h3>
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+              {viewMode === "realizado" ? "Realizado" : viewMode === "previsto" ? "Previsto" : "Comparativo"}
+            </Badge>
+          </div>
           {storeLabel && (
             <p className="text-sm font-semibold text-primary mt-1" data-testid="dre-store-label">
               Loja: {storeLabel}
@@ -383,6 +491,15 @@ export default function DRE() {
           </p>
         </div>
 
+        {isComp && (
+          <div className="flex items-center justify-end gap-4 px-4 py-2 bg-muted/20 border-b border-border/30 text-xs text-muted-foreground font-medium">
+            <span className="flex-1" />
+            <span className="w-[110px] text-right">Realizado</span>
+            <span className="w-[110px] text-right">Previsto</span>
+            <span className="w-[80px] text-right">Diferenca</span>
+          </div>
+        )}
+
         {isLoading ? (
           <div className="p-8 space-y-3">
             {[1, 2, 3, 4, 5].map((i) => (
@@ -392,12 +509,9 @@ export default function DRE() {
         ) : (
           <div className="divide-y divide-border/50">
             {dreLines.map((line, idx) => {
-              const isNeg = line.value < 0;
-              const isPos = line.value > 0;
+              const displayValue = line.value;
               const colorClass = line.isTotal
-                ? line.color === "positive"
-                  ? "text-emerald-600 dark:text-emerald-400"
-                  : "text-rose-600 dark:text-rose-400"
+                ? (displayValue >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")
                 : line.color === "negative"
                   ? "text-rose-500 dark:text-rose-400"
                   : line.color === "positive"
@@ -405,10 +519,12 @@ export default function DRE() {
                     : "text-foreground";
 
               const bgClass = line.isTotal
-                ? line.color === "positive"
-                  ? "bg-emerald-50/50 dark:bg-emerald-500/5"
-                  : "bg-rose-50/50 dark:bg-rose-500/5"
+                ? (displayValue >= 0 ? "bg-emerald-50/50 dark:bg-emerald-500/5" : "bg-rose-50/50 dark:bg-rose-500/5")
                 : "";
+
+              const diff = isComp && line.previstoValue !== undefined
+                ? line.value - line.previstoValue
+                : 0;
 
               return (
                 <div
@@ -416,17 +532,27 @@ export default function DRE() {
                   className={`flex items-center justify-between px-4 py-3 gap-4 ${bgClass} ${line.level === 2 ? "pl-10" : line.level === 1 ? "pl-6" : "pl-4"}`}
                   data-testid={`dre-line-${idx}`}
                 >
-                  <span className={`text-sm ${line.isBold ? "font-semibold" : ""} ${line.isTotal ? "text-base" : ""}`}>
+                  <span className={`text-sm flex-1 ${line.isBold ? "font-semibold" : ""} ${line.isTotal ? "text-base" : ""}`}>
                     {line.label}
                   </span>
-                  <span className={`font-mono text-sm ${line.isBold ? "font-bold" : "font-medium"} ${colorClass} ${line.isTotal ? "text-base" : ""}`}>
-                    {formatCurrency(Math.abs(line.value) / 100)}
-                    {line.value !== 0 && (
-                      <span className="ml-1 text-xs">
-                        {isNeg ? "" : isPos ? "" : ""}
+
+                  {isComp ? (
+                    <div className="flex items-center gap-4">
+                      <span className={`font-mono text-sm text-right w-[110px] ${line.isBold ? "font-bold" : "font-medium"} ${colorClass}`}>
+                        {formatCurrency(Math.abs(displayValue) / 100)}
                       </span>
-                    )}
-                  </span>
+                      <span className={`font-mono text-sm text-right w-[110px] ${line.isBold ? "font-bold" : "font-medium"} text-muted-foreground`}>
+                        {line.previstoValue !== undefined ? formatCurrency(Math.abs(line.previstoValue) / 100) : "-"}
+                      </span>
+                      <span className={`font-mono text-xs text-right w-[80px] ${diff > 0 ? "text-emerald-600" : diff < 0 ? "text-rose-600" : "text-muted-foreground"}`}>
+                        {diff !== 0 ? (diff > 0 ? "+" : "") + formatCurrency(Math.abs(diff) / 100) : "-"}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className={`font-mono text-sm ${line.isBold ? "font-bold" : "font-medium"} ${colorClass} ${line.isTotal ? "text-base" : ""}`}>
+                      {formatCurrency(Math.abs(displayValue) / 100)}
+                    </span>
+                  )}
                 </div>
               );
             })}

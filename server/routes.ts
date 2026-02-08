@@ -47,6 +47,14 @@ export async function registerRoutes(
     try {
       const userId = getUserId(req);
       const { productId, productQty, ...txData } = req.body;
+
+      if (txData.dueDate && typeof txData.dueDate === "string") {
+        txData.dueDate = new Date(txData.dueDate);
+      }
+      if (txData.paymentDate && typeof txData.paymentDate === "string") {
+        txData.paymentDate = new Date(txData.paymentDate);
+      }
+
       const input = api.transactions.create.input.parse(txData);
 
       if (productId && input.type === "income") {
@@ -64,8 +72,13 @@ export async function registerRoutes(
         }
       }
 
-      const transaction = await storage.createTransaction(input, userId);
-      res.status(201).json(transaction);
+      if (input.isRecurring === 1 && input.recurrenceFrequency && (input.recurrenceCount || 0) > 1) {
+        const created = await storage.createTransactionWithRecurrence(input, userId);
+        res.status(201).json(created[0]);
+      } else {
+        const transaction = await storage.createTransaction(input, userId);
+        res.status(201).json(transaction);
+      }
     } catch (err) {
       if (err instanceof z.ZodError) {
         return res.status(400).json({
@@ -82,7 +95,16 @@ export async function registerRoutes(
       const id = parseInt(req.params.id as string);
       if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
       const userId = getUserId(req);
-      const input = api.transactions.create.input.partial().parse(req.body);
+
+      const body = { ...req.body };
+      if (body.dueDate && typeof body.dueDate === "string") {
+        body.dueDate = new Date(body.dueDate);
+      }
+      if (body.paymentDate && typeof body.paymentDate === "string") {
+        body.paymentDate = new Date(body.paymentDate);
+      }
+
+      const input = api.transactions.create.input.partial().parse(body);
       const updated = await storage.updateTransaction(id, input, userId);
       if (!updated) return res.status(404).json({ message: "Transacao nao encontrada" });
       res.json(updated);
@@ -92,6 +114,16 @@ export async function registerRoutes(
       }
       throw err;
     }
+  });
+
+  app.patch("/api/transactions/:id/mark-paid", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id as string);
+    if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
+    const userId = getUserId(req);
+    const paymentDate = req.body.paymentDate ? new Date(req.body.paymentDate) : new Date();
+    const updated = await storage.markAsPaid(id, userId, paymentDate);
+    if (!updated) return res.status(404).json({ message: "Transacao nao encontrada" });
+    res.json(updated);
   });
 
   app.patch("/api/transactions/:id/reconcile", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
@@ -146,10 +178,15 @@ export async function registerRoutes(
         }
 
         const category = row.category || row.categoria || null;
+        const store = row.store || row.loja || null;
 
         const [tx] = await (await import("./db")).db
           .insert((await import("@shared/schema")).transactions)
-          .values({ description, amount, type, category, userId, date: dateVal })
+          .values({
+            description, amount, type, category, store, userId, date: dateVal,
+            status: "pago",
+            paymentDate: dateVal,
+          })
           .returning();
         created.push(tx);
       }
@@ -395,6 +432,32 @@ export async function registerRoutes(
       .where(eq(users.id, userId));
 
     return res.json({ message: "Primeiro usuario promovido a admin", role: "admin" });
+  });
+
+  // ====== Email Notification: Due Accounts Summary ======
+  app.get("/api/notifications/due-today", isAuthenticated, requireVerified, async (req, res) => {
+    const userId = getUserId(req);
+    const allTx = await storage.getTransactions(userId);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(today);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const dueTodayTx = allTx.filter((tx) => {
+      if (tx.status !== "pendente" || !tx.dueDate) return false;
+      const due = new Date(tx.dueDate);
+      due.setHours(0, 0, 0, 0);
+      return due.getTime() === today.getTime();
+    });
+
+    const overdueTx = allTx.filter((tx) => {
+      if (tx.status !== "pendente" || !tx.dueDate) return false;
+      const due = new Date(tx.dueDate);
+      due.setHours(0, 0, 0, 0);
+      return due < today;
+    });
+
+    res.json({ dueToday: dueTodayTx, overdue: overdueTx });
   });
 
   return httpServer;

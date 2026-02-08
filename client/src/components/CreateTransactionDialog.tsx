@@ -9,14 +9,16 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/hooks/use-transactions";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { CurrencyInput, parseBRL, formatBRL } from "@/components/CurrencyInput";
-import { Plus, ArrowUpCircle, ArrowDownCircle } from "lucide-react";
+import { Plus, ArrowUpCircle, ArrowDownCircle, Repeat, CalendarClock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Product } from "@shared/schema";
-import { CATEGORY_OPTIONS, getCategoryLabel } from "@shared/schema";
+import { CATEGORY_OPTIONS, getCategoryLabel, RECURRENCE_OPTIONS } from "@shared/schema";
 
 export const STORE_OPTIONS = [
   { value: "fazenda", label: "Fazenda" },
@@ -40,6 +42,12 @@ const formSchema = z.object({
   type: z.enum(["income", "expense"]),
   category: z.string().optional(),
   store: z.string().optional(),
+  status: z.enum(["pago", "pendente"]),
+  dueDate: z.string().optional(),
+  paymentDate: z.string().optional(),
+  isRecurring: z.boolean(),
+  recurrenceFrequency: z.string().optional(),
+  recurrenceCount: z.string().optional(),
   productId: z.string().optional(),
   productQty: z.string().optional(),
 });
@@ -59,13 +67,7 @@ export function CreateTransactionDialog() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (payload: {
-      description: string;
-      amount: number;
-      type: string;
-      productId?: number;
-      productQty?: number;
-    }) => {
+    mutationFn: async (payload: any) => {
       const res = await apiRequest("POST", "/api/transactions", payload);
       return await res.json();
     },
@@ -94,9 +96,15 @@ export function CreateTransactionDialog() {
     defaultValues: {
       description: "",
       amount: "",
-      type: "income",
+      type: "expense",
       category: "none",
       store: "none",
+      status: "pago",
+      dueDate: "",
+      paymentDate: "",
+      isRecurring: false,
+      recurrenceFrequency: "mensal",
+      recurrenceCount: "1",
       productId: "",
       productQty: "1",
     },
@@ -104,6 +112,8 @@ export function CreateTransactionDialog() {
 
   const watchType = form.watch("type");
   const watchProductId = form.watch("productId");
+  const watchStatus = form.watch("status");
+  const watchIsRecurring = form.watch("isRecurring");
 
   const selectedProduct = watchProductId && watchProductId !== "none"
     ? products.find((p) => p.id === parseInt(watchProductId))
@@ -112,26 +122,33 @@ export function CreateTransactionDialog() {
   function onSubmit(values: z.infer<typeof formSchema>) {
     const amountInCents = Math.round(parseBRL(values.amount) * 100);
 
-    const payload: {
-      description: string;
-      amount: number;
-      type: string;
-      category?: string;
-      store?: string;
-      productId?: number;
-      productQty?: number;
-    } = {
+    const payload: any = {
       description: values.description,
       amount: amountInCents,
       type: values.type,
+      status: values.status,
     };
 
     if (values.category && values.category !== "none") {
       payload.category = values.category;
     }
-
     if (values.store && values.store !== "none") {
       payload.store = values.store;
+    }
+
+    if (values.status === "pendente" && values.dueDate) {
+      payload.dueDate = values.dueDate;
+    }
+    if (values.status === "pago" && values.paymentDate) {
+      payload.paymentDate = values.paymentDate;
+    } else if (values.status === "pago") {
+      payload.paymentDate = new Date().toISOString();
+    }
+
+    if (values.isRecurring) {
+      payload.isRecurring = 1;
+      payload.recurrenceFrequency = values.recurrenceFrequency || "mensal";
+      payload.recurrenceCount = parseInt(values.recurrenceCount || "1") || 1;
     }
 
     if (values.type === "income" && values.productId && values.productId !== "none") {
@@ -160,7 +177,7 @@ export function CreateTransactionDialog() {
           <Plus className="mr-2 h-5 w-5" /> Nova Transacao
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px]">
+      <DialogContent className="sm:max-w-[480px] max-h-[90vh] overflow-y-auto">
         <DialogHeader className="pb-4">
           <DialogTitle className="text-2xl font-bold">Nova Transacao</DialogTitle>
           <DialogDescription>
@@ -169,7 +186,7 @@ export function CreateTransactionDialog() {
         </DialogHeader>
 
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
             <FormField
               control={form.control}
               name="type"
@@ -207,6 +224,71 @@ export function CreateTransactionDialog() {
                 </FormItem>
               )}
             />
+
+            <FormField
+              control={form.control}
+              name="status"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="flex items-center gap-2">
+                    <CalendarClock className="h-4 w-4" />
+                    Status
+                  </FormLabel>
+                  <Select value={field.value} onValueChange={field.onChange}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-status">
+                        <SelectValue />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="pago" data-testid="option-status-pago">Pago/Recebido</SelectItem>
+                      <SelectItem value="pendente" data-testid="option-status-pendente">Pendente/Agendado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {watchStatus === "pendente" && (
+              <FormField
+                control={form.control}
+                name="dueDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Data de Vencimento</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="date"
+                        {...field}
+                        data-testid="input-due-date"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {watchStatus === "pago" && (
+              <FormField
+                control={form.control}
+                name="paymentDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Data de Pagamento (opcional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="date"
+                        {...field}
+                        data-testid="input-payment-date"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <FormField
               control={form.control}
@@ -317,7 +399,7 @@ export function CreateTransactionDialog() {
                 <FormItem>
                   <FormLabel>Descricao</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ex: Venda de Consultoria" {...field} data-testid="input-transaction-description" />
+                    <Input placeholder="Ex: Aluguel da Loja do Manel" {...field} data-testid="input-transaction-description" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -342,6 +424,76 @@ export function CreateTransactionDialog() {
                 </FormItem>
               )}
             />
+
+            <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Repeat className="h-4 w-4 text-muted-foreground" />
+                  <Label className="text-sm font-medium">Conta Recorrente</Label>
+                </div>
+                <FormField
+                  control={form.control}
+                  name="isRecurring"
+                  render={({ field }) => (
+                    <FormItem className="flex items-center space-y-0">
+                      <FormControl>
+                        <Switch
+                          checked={field.value}
+                          onCheckedChange={field.onChange}
+                          data-testid="switch-recurring"
+                        />
+                      </FormControl>
+                    </FormItem>
+                  )}
+                />
+              </div>
+
+              {watchIsRecurring && (
+                <div className="flex items-center gap-2 flex-wrap">
+                  <FormField
+                    control={form.control}
+                    name="recurrenceFrequency"
+                    render={({ field }) => (
+                      <FormItem className="flex-1 min-w-[120px]">
+                        <Select value={field.value || "mensal"} onValueChange={field.onChange}>
+                          <FormControl>
+                            <SelectTrigger data-testid="select-recurrence-frequency">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {RECURRENCE_OPTIONS.map((opt) => (
+                              <SelectItem key={opt.value} value={opt.value}>
+                                {opt.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="recurrenceCount"
+                    render={({ field }) => (
+                      <FormItem className="w-[80px]">
+                        <FormControl>
+                          <Input
+                            type="number"
+                            min="2"
+                            max="36"
+                            placeholder="Meses"
+                            {...field}
+                            data-testid="input-recurrence-count"
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">vezes</span>
+                </div>
+              )}
+            </div>
 
           </form>
         </Form>

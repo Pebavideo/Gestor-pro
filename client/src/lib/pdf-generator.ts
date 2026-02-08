@@ -531,3 +531,71 @@ export function printTable(title: string, elementId: string) {
     printWindow.print();
   }, 300);
 }
+
+interface DueAccountTx {
+  description: string;
+  amount: number;
+  type: string;
+  dueDate: string | Date | null;
+  store: string | null;
+  status: string;
+}
+
+export function openEmailDueAccounts(dueTx: DueAccountTx[], overdueTx: DueAccountTx[]) {
+  const now = format(new Date(), "dd/MM/yyyy HH:mm", { locale: ptBR });
+
+  let body = `GESTOR DE EMPRESAS PRO - ALERTA DE CONTAS\n`;
+  body += `Gerado em: ${now}\n`;
+  body += `========================================\n\n`;
+
+  if (overdueTx.length > 0) {
+    body += `CONTAS VENCIDAS (${overdueTx.length}):\n`;
+    body += `----------------------------------------\n`;
+    const byStore: Record<string, typeof overdueTx> = {};
+    for (const tx of overdueTx) {
+      const key = tx.store || "Sem Loja";
+      if (!byStore[key]) byStore[key] = [];
+      byStore[key].push(tx);
+    }
+    for (const [store, txs] of Object.entries(byStore)) {
+      body += `\n[${store}]\n`;
+      for (const tx of txs) {
+        const due = tx.dueDate ? format(new Date(tx.dueDate), "dd/MM/yyyy") : "-";
+        body += `  - ${tx.description}: ${formatCurrencyPDF(tx.amount / 100)} (Venc: ${due})\n`;
+      }
+    }
+    const totalOverdue = overdueTx.reduce((s, t) => s + t.amount, 0);
+    body += `\nTotal Vencido: ${formatCurrencyPDF(totalOverdue / 100)}\n\n`;
+  }
+
+  if (dueTx.length > 0) {
+    body += `CONTAS A VENCER NOS PROXIMOS 7 DIAS (${dueTx.length}):\n`;
+    body += `----------------------------------------\n`;
+    const byStore: Record<string, typeof dueTx> = {};
+    for (const tx of dueTx) {
+      const key = tx.store || "Sem Loja";
+      if (!byStore[key]) byStore[key] = [];
+      byStore[key].push(tx);
+    }
+    for (const [store, txs] of Object.entries(byStore)) {
+      body += `\n[${store}]\n`;
+      for (const tx of txs) {
+        const due = tx.dueDate ? format(new Date(tx.dueDate), "dd/MM/yyyy") : "-";
+        body += `  - ${tx.description}: ${formatCurrencyPDF(tx.amount / 100)} (Venc: ${due})\n`;
+      }
+    }
+    const totalDue = dueTx.reduce((s, t) => s + t.amount, 0);
+    body += `\nTotal a Vencer: ${formatCurrencyPDF(totalDue / 100)}\n\n`;
+  }
+
+  if (overdueTx.length === 0 && dueTx.length === 0) {
+    body += `Nenhuma conta vencida ou a vencer nos proximos 7 dias.\n`;
+  }
+
+  body += `\n========================================\n`;
+  body += `Gestor de Empresas Pro`;
+
+  const subject = encodeURIComponent(`Alerta de Contas - ${now}`);
+  const encodedBody = encodeURIComponent(body);
+  window.location.href = `mailto:?subject=${subject}&body=${encodedBody}`;
+}

@@ -7,13 +7,14 @@ import { useAuth } from "@/hooks/use-auth";
 import { StatsCard } from "@/components/StatsCard";
 import { CreateTransactionDialog } from "@/components/CreateTransactionDialog";
 import { TransactionTable } from "@/components/TransactionTable";
-import { TrendingUp, TrendingDown, Landmark, Wallet, CalendarDays, FileDown, Printer, Mail, Upload, Trash2 } from "lucide-react";
+import { TrendingUp, TrendingDown, Landmark, Wallet, CalendarDays, FileDown, Printer, Mail, Upload, Trash2, AlertTriangle, Clock } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { generateDashboardPDF, printTable, openEmailDashboard } from "@/lib/pdf-generator";
+import { Card } from "@/components/ui/card";
+import { generateDashboardPDF, printTable, openEmailDashboard, openEmailDueAccounts } from "@/lib/pdf-generator";
 import { useToast } from "@/hooks/use-toast";
 import { CATEGORY_OPTIONS, getCategoryLabel } from "@shared/schema";
 
@@ -98,6 +99,53 @@ export default function Dashboard() {
     const netProfit = totalIncome - totalExpenses - taxAmount;
     return { totalIncome, totalExpenses, taxAmount, netProfit, currentTaxRate: taxRate };
   }, [transactions, settingsData, monthFilter]);
+
+  const alertSummary = useMemo(() => {
+    if (!transactions) return { overdueTotal: 0, overdueCount: 0, dueSoonTotal: 0, dueSoonCount: 0 };
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const sevenDaysLater = new Date(now);
+    sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
+
+    let overdueTotal = 0, overdueCount = 0, dueSoonTotal = 0, dueSoonCount = 0;
+    for (const tx of transactions) {
+      if (tx.status !== "pendente" || !tx.dueDate) continue;
+      const due = new Date(tx.dueDate);
+      due.setHours(0, 0, 0, 0);
+      if (due < now) {
+        overdueTotal += tx.amount;
+        overdueCount++;
+      } else if (due <= sevenDaysLater) {
+        dueSoonTotal += tx.amount;
+        dueSoonCount++;
+      }
+    }
+    return { overdueTotal, overdueCount, dueSoonTotal, dueSoonCount };
+  }, [transactions]);
+
+  function handleEmailDueAccounts() {
+    if (!transactions) return;
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const sevenDaysLater = new Date(now);
+    sevenDaysLater.setDate(sevenDaysLater.getDate() + 7);
+
+    const overdue = transactions.filter((tx) => {
+      if (tx.status !== "pendente" || !tx.dueDate) return false;
+      const due = new Date(tx.dueDate);
+      due.setHours(0, 0, 0, 0);
+      return due < now;
+    });
+
+    const dueSoon = transactions.filter((tx) => {
+      if (tx.status !== "pendente" || !tx.dueDate) return false;
+      const due = new Date(tx.dueDate);
+      due.setHours(0, 0, 0, 0);
+      return due >= now && due <= sevenDaysLater;
+    });
+
+    openEmailDueAccounts(dueSoon, overdue);
+  }
 
   const isLoading = txLoading || settingsLoading;
 
@@ -374,6 +422,61 @@ export default function Dashboard() {
           isLoading={isLoading}
         />
       </div>
+
+      {(alertSummary.overdueCount > 0 || alertSummary.dueSoonCount > 0) && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {alertSummary.overdueCount > 0 && (
+              <Card className="p-4 border-l-4 border-l-red-500 bg-red-50/50 dark:bg-red-500/5" data-testid="card-overdue-alert">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-red-100 dark:bg-red-500/20">
+                    <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-red-700 dark:text-red-400">Total Vencido</p>
+                    <p className="text-lg font-bold text-red-800 dark:text-red-300 font-mono" data-testid="text-overdue-total">
+                      {formatCurrency(alertSummary.overdueTotal / 100)}
+                    </p>
+                  </div>
+                  <Badge variant="secondary" className="bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-400 shrink-0">
+                    {alertSummary.overdueCount} {alertSummary.overdueCount === 1 ? "conta" : "contas"}
+                  </Badge>
+                </div>
+              </Card>
+            )}
+            {alertSummary.dueSoonCount > 0 && (
+              <Card className="p-4 border-l-4 border-l-orange-500 bg-orange-50/50 dark:bg-orange-500/5" data-testid="card-due-soon-alert">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-500/20">
+                    <Clock className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-orange-700 dark:text-orange-400">A Vencer (7 dias)</p>
+                    <p className="text-lg font-bold text-orange-800 dark:text-orange-300 font-mono" data-testid="text-due-soon-total">
+                      {formatCurrency(alertSummary.dueSoonTotal / 100)}
+                    </p>
+                  </div>
+                  <Badge variant="secondary" className="bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-400 shrink-0">
+                    {alertSummary.dueSoonCount} {alertSummary.dueSoonCount === 1 ? "conta" : "contas"}
+                  </Badge>
+                </div>
+              </Card>
+            )}
+          </div>
+          <div className="flex justify-end">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleEmailDueAccounts}
+              data-testid="button-email-due-accounts"
+              title="Enviar alerta de contas por e-mail"
+            >
+              <Mail className="h-4 w-4 mr-2" />
+              Enviar Alerta por E-mail
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className="space-y-4">
         <div>

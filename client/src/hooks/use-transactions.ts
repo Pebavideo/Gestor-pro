@@ -157,6 +157,36 @@ export function useToggleReconciled() {
   });
 }
 
+export function useMarkAsPaid() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async ({ id, paymentDate }: { id: number; paymentDate?: string }) => {
+      const res = await fetch(`/api/transactions/${id}/mark-paid`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paymentDate }),
+        credentials: "include",
+      });
+      if (res.status === 403) throw new Error("Apenas administradores podem liquidar transacoes.");
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Erro ao liquidar");
+      }
+      return await res.json() as Transaction;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.summary.get.path] });
+      toast({ title: "Transacao liquidada", description: "Status atualizado para Pago/Recebido." });
+    },
+    onError: (error) => {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    },
+  });
+}
+
 export function useImportCSV() {
   const queryClient = useQueryClient();
   const { toast } = useToast();

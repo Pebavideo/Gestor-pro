@@ -25,6 +25,22 @@ export function getCategoryLabel(value: string | null | undefined): string {
   return found ? found.label : value;
 }
 
+export const STATUS_OPTIONS = [
+  { value: "pendente", label: "Pendente" },
+  { value: "pago", label: "Pago/Recebido" },
+] as const;
+
+export function getStatusLabel(value: string | null | undefined): string {
+  if (!value) return "Pago/Recebido";
+  const found = STATUS_OPTIONS.find((o) => o.value === value);
+  return found ? found.label : value;
+}
+
+export const RECURRENCE_OPTIONS = [
+  { value: "mensal", label: "Mensal" },
+  { value: "quinzenal", label: "Quinzenal" },
+] as const;
+
 export const transactions = pgTable("transactions", {
   id: serial("id").primaryKey(),
   description: text("description").notNull(),
@@ -32,6 +48,13 @@ export const transactions = pgTable("transactions", {
   type: text("type").notNull(),
   category: text("category"),
   store: text("store"),
+  status: text("status").notNull().default("pago"),
+  dueDate: timestamp("due_date"),
+  paymentDate: timestamp("payment_date"),
+  isRecurring: integer("is_recurring").notNull().default(0),
+  recurrenceFrequency: text("recurrence_frequency"),
+  recurrenceCount: integer("recurrence_count"),
+  recurrenceGroupId: text("recurrence_group_id"),
   userId: varchar("user_id").notNull(),
   date: timestamp("date").defaultNow().notNull(),
   reconciled: integer("reconciled").notNull().default(0),
@@ -97,6 +120,14 @@ export const insertTransactionSchema = createInsertSchema(transactions).pick({
   type: true,
   category: true,
   store: true,
+  status: true,
+  dueDate: true,
+  paymentDate: true,
+  isRecurring: true,
+  recurrenceFrequency: true,
+  recurrenceCount: true,
+  recurrenceGroupId: true,
+  date: true,
 });
 
 export const insertSettingsSchema = createInsertSchema(settings).pick({

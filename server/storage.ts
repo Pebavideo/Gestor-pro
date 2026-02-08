@@ -8,15 +8,18 @@ import {
 } from "@shared/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 import type { User } from "@shared/models/auth";
+import { randomUUID } from "crypto";
 
 export interface IStorage {
   getTransactions(userId: string): Promise<Transaction[]>;
   createTransaction(transaction: InsertTransaction, userId: string): Promise<Transaction>;
+  createTransactionWithRecurrence(transaction: InsertTransaction, userId: string): Promise<Transaction[]>;
   updateTransaction(id: number, data: Partial<InsertTransaction>, userId: string): Promise<Transaction | null>;
   deleteTransaction(id: number, userId: string): Promise<boolean>;
   getTransaction(id: number): Promise<Transaction | undefined>;
   
   toggleReconciled(id: number, userId: string): Promise<Transaction | null>;
+  markAsPaid(id: number, userId: string, paymentDate?: Date): Promise<Transaction | null>;
 
   getSettings(userId: string): Promise<Settings>;
   updateSettings(settings: InsertSettings, userId: string): Promise<Settings>;
@@ -53,6 +56,53 @@ export class DatabaseStorage implements IStorage {
     return transaction;
   }
 
+  async createTransactionWithRecurrence(insertTransaction: InsertTransaction, userId: string): Promise<Transaction[]> {
+    const isRecurring = insertTransaction.isRecurring === 1;
+    const frequency = insertTransaction.recurrenceFrequency;
+    const count = insertTransaction.recurrenceCount || 1;
+
+    if (!isRecurring || !frequency || count <= 1) {
+      const tx = await this.createTransaction(insertTransaction, userId);
+      return [tx];
+    }
+
+    const groupId = randomUUID();
+    const created: Transaction[] = [];
+
+    const baseDueDate = insertTransaction.dueDate ? new Date(insertTransaction.dueDate) : new Date();
+
+    for (let i = 0; i < count; i++) {
+      const dueDate = new Date(baseDueDate);
+      if (frequency === "mensal") {
+        dueDate.setMonth(dueDate.getMonth() + i);
+      } else if (frequency === "quinzenal") {
+        dueDate.setDate(dueDate.getDate() + (i * 15));
+      }
+
+      const txDate = i === 0 ? (insertTransaction.date || new Date()) : dueDate;
+
+      const [tx] = await db
+        .insert(transactions)
+        .values({
+          ...insertTransaction,
+          userId,
+          dueDate,
+          date: txDate,
+          status: i === 0 ? (insertTransaction.status || "pendente") : "pendente",
+          paymentDate: i === 0 ? insertTransaction.paymentDate : null,
+          isRecurring: 1,
+          recurrenceFrequency: frequency,
+          recurrenceCount: count,
+          recurrenceGroupId: groupId,
+          description: `${insertTransaction.description} (${i + 1}/${count})`,
+        })
+        .returning();
+      created.push(tx);
+    }
+
+    return created;
+  }
+
   async getTransaction(id: number): Promise<Transaction | undefined> {
     const [tx] = await db.select().from(transactions).where(eq(transactions.id, id));
     return tx;
@@ -86,6 +136,18 @@ export class DatabaseStorage implements IStorage {
     const [updated] = await db
       .update(transactions)
       .set({ reconciled: newVal })
+      .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
+      .returning();
+    return updated;
+  }
+
+  async markAsPaid(id: number, userId: string, paymentDate?: Date): Promise<Transaction | null> {
+    const [existing] = await db.select().from(transactions)
+      .where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
+    if (!existing) return null;
+    const [updated] = await db
+      .update(transactions)
+      .set({ status: "pago", paymentDate: paymentDate || new Date() })
       .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
       .returning();
     return updated;
@@ -180,6 +242,8 @@ export class DatabaseStorage implements IStorage {
           amount: emp.salary,
           type: "expense",
           category: "salarios",
+          status: "pago",
+          paymentDate: new Date(),
           userId,
         })
         .returning();
@@ -199,11 +263,14 @@ export class DatabaseStorage implements IStorage {
         amount: emp.salary,
         type: "expense",
         category: "salarios",
+        status: "pago",
+        paymentDate: new Date(),
         userId,
       })
       .returning();
     return tx;
   }
+
   async getProducts(userId: string): Promise<Product[]> {
     return await db.select().from(products)
       .where(and(eq(products.userId, userId), eq(products.active, 1)))

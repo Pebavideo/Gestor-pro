@@ -4,6 +4,18 @@
 Financial management dashboard for businesses. Multi-user system with role-based permissions (Admin/Operator). Built with React + Express + PostgreSQL. All UI in Portuguese.
 
 ## Recent Changes
+- 2026-02-08: Contas a Pagar/Receber: status (pago/pendente), dueDate, paymentDate fields on transactions
+- 2026-02-08: Traffic light system: red border = overdue, orange = due within 3 days, green = paid
+- 2026-02-08: Status badge per transaction: Pago, Pendente, Vencida, Vence em breve
+- 2026-02-08: Mark-as-paid button (dollar icon) to liquidate pending transactions
+- 2026-02-08: Dashboard alert cards: Total Vencido (red) and A Vencer 7 dias (orange) with counts
+- 2026-02-08: Email alert button sends mailto: with due accounts grouped by store
+- 2026-02-08: Recurring transactions: toggle + frequency (mensal/quinzenal) + count, generates N copies with incremented due dates
+- 2026-02-08: DRE Previsto vs Realizado: 3-mode toggle (Realizado=paid only, Previsto=all by dueDate, Comparativo=side-by-side with difference)
+- 2026-02-08: CreateTransactionDialog includes status selector, due date (for pending), payment date (for paid), recurring section
+- 2026-02-08: Edit transaction dialog now includes status and due date fields
+- 2026-02-08: Server route PATCH /api/transactions/:id/mark-paid to update status to pago with paymentDate
+- 2026-02-08: Server route GET /api/notifications/due-today returns due-today and overdue transaction lists
 - 2026-02-08: Added 'category' field to transactions (Alimentacao, Impostos, Salarios, Vendas, Servicos, Investimentos, Transporte, Aluguel, Materiais, Manutencao, Marketing, Outros)
 - 2026-02-08: Category selectable in create/edit transaction dialogs, displayed as badge in tables
 - 2026-02-08: DRE now groups receitas and despesas by category with breakdown
@@ -55,7 +67,7 @@ Financial management dashboard for businesses. Multi-user system with role-based
 
 ### Key Tables
 - `users`: id (varchar UUID), email (unique), firstName, lastName, passwordHash, emailVerified, verificationCode, verificationCodeExpiresAt, role ('admin'|'operator'), createdAt, updatedAt
-- `transactions`: id (serial), description, amount (cents), type, category (nullable), store (nullable), userId, date, reconciled (0/1)
+- `transactions`: id (serial), description, amount (cents), type, category (nullable), store (nullable), status (pago/pendente), dueDate (nullable), paymentDate (nullable), isRecurring (0/1), recurrenceFrequency (nullable), recurrenceCount (nullable), recurrenceGroupId (nullable), userId, date, reconciled (0/1)
 - `employees`: id (serial), name, position, salary (cents), userId, active (1/0), createdAt
 - `products`: id (serial), name, specification (text, nullable), unit (text, default 'UN'), quantity, price (cents), userId, active (1/0), createdAt
 - `settings`: id (serial), userId (unique), taxRate
