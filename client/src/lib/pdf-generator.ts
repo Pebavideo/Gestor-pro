@@ -269,6 +269,58 @@ export function openWhatsApp(message: string) {
   window.open(`https://wa.me/?text=${message}`, "_blank");
 }
 
+export function openEmailDashboard(
+  summary: FinancialSummary,
+  transactions: TransactionData[],
+  filterLabel: string
+) {
+  const subject = `Relatorio Financeiro - ${filterLabel} - Gestor de Empresas Pro`;
+  const lines = [
+    "GESTOR DE EMPRESAS PRO",
+    `Relatorio Financeiro - ${filterLabel}`,
+    `Gerado em: ${format(new Date(), "dd/MM/yyyy HH:mm", { locale: ptBR })}`,
+    "",
+    "=== RESUMO FINANCEIRO ===",
+    `Faturamento Bruto: ${formatCurrencyPDF(summary.totalIncome / 100)}`,
+    `Despesas Totais: ${formatCurrencyPDF(summary.totalExpenses / 100)}`,
+    `Impostos (${summary.currentTaxRate}%): ${formatCurrencyPDF(summary.taxAmount / 100)}`,
+    `Lucro Liquido: ${formatCurrencyPDF(summary.netProfit / 100)}`,
+    "",
+    `=== TRANSACOES (${transactions.length}) ===`,
+  ];
+  for (const tx of transactions) {
+    const d = format(new Date(tx.date), "dd/MM/yyyy HH:mm", { locale: ptBR });
+    const tipo = tx.type === "income" ? "Entrada" : "Saida";
+    const sinal = tx.type === "income" ? "+" : "-";
+    lines.push(`${d} | ${tipo} | ${tx.description} | ${sinal}${formatCurrencyPDF(tx.amount / 100)}`);
+  }
+  lines.push("", "---", "Gestor de Empresas Pro - Documento gerado automaticamente");
+  const body = lines.join("\n");
+  window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, "_self");
+}
+
+export function openEmailTeam(employees: EmployeeData[], totalPayroll: number) {
+  const subject = "Relatorio de Equipe - Gestor de Empresas Pro";
+  const lines = [
+    "GESTOR DE EMPRESAS PRO",
+    "Relatorio de Equipe",
+    `Gerado em: ${format(new Date(), "dd/MM/yyyy HH:mm", { locale: ptBR })}`,
+    "",
+    "=== RESUMO ===",
+    `Total de Funcionarios: ${employees.length}`,
+    `Folha Mensal: ${formatCurrencyPDF(totalPayroll / 100)}`,
+    "",
+    "=== LISTA DE FUNCIONARIOS ===",
+  ];
+  employees.forEach((emp, idx) => {
+    const d = format(new Date(emp.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR });
+    lines.push(`${idx + 1}. ${emp.name} | ${emp.position} | Admissao: ${d} | Salario: ${formatCurrencyPDF(emp.salary / 100)}`);
+  });
+  lines.push("", "---", "Gestor de Empresas Pro - Documento gerado automaticamente");
+  const body = lines.join("\n");
+  window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, "_self");
+}
+
 export function printTable(title: string, elementId: string) {
   const element = document.getElementById(elementId);
   if (!element) return;

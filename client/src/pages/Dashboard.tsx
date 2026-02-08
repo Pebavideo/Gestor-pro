@@ -7,10 +7,10 @@ import { useAuth } from "@/hooks/use-auth";
 import { StatsCard } from "@/components/StatsCard";
 import { CreateTransactionDialog } from "@/components/CreateTransactionDialog";
 import { TransactionTable } from "@/components/TransactionTable";
-import { TrendingUp, TrendingDown, Landmark, Wallet, CalendarDays, FileDown, Printer } from "lucide-react";
+import { TrendingUp, TrendingDown, Landmark, Wallet, CalendarDays, FileDown, Printer, Mail } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { generateDashboardPDF, printTable } from "@/lib/pdf-generator";
+import { generateDashboardPDF, printTable, openEmailDashboard } from "@/lib/pdf-generator";
 
 const MONTH_NAMES = [
   "Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho",
@@ -167,6 +167,16 @@ export default function Dashboard() {
             title="Imprimir"
           >
             <Printer className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => openEmailDashboard(summary, filteredTransactions, filterLabel)}
+            disabled={isLoading || !transactions?.length}
+            data-testid="button-email-dashboard"
+            title="Enviar por E-mail"
+          >
+            <Mail className="h-4 w-4" />
           </Button>
         </div>
       </div>

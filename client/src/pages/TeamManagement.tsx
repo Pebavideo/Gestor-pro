@@ -14,8 +14,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Users, Plus, Pencil, Trash2, Inbox, Banknote, DollarSign, FileDown, Printer, Share2, Clock } from "lucide-react";
-import { generateTeamPDF, generateWhatsAppMessage, openWhatsApp, printTable } from "@/lib/pdf-generator";
+import { Users, Plus, Pencil, Trash2, Inbox, Banknote, DollarSign, FileDown, Printer, Share2, Clock, Mail } from "lucide-react";
+import { generateTeamPDF, generateWhatsAppMessage, openWhatsApp, printTable, openEmailTeam } from "@/lib/pdf-generator";
 import { CurrencyInput, parseBRL, centsToFormatted } from "@/components/CurrencyInput";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -226,6 +226,16 @@ export default function TeamManagement() {
           >
             <Printer className="h-4 w-4" />
           </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => employees && openEmailTeam(employees, totalPayroll)}
+            disabled={!employees?.length}
+            data-testid="button-email-team"
+            title="Enviar por E-mail"
+          >
+            <Mail className="h-4 w-4" />
+          </Button>
           {isAdmin && (
             <>
               <AlertDialog>
@@ -337,7 +347,7 @@ export default function TeamManagement() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Card className="p-4">
           <div className="flex items-center gap-3">
             <div className="p-2 rounded-lg bg-primary/10 text-primary">
@@ -357,19 +367,6 @@ export default function TeamManagement() {
             <div>
               <p className="text-sm text-muted-foreground">Folha Mensal</p>
               <p className="text-2xl font-bold" data-testid="text-total-payroll">{formatCurrency(totalPayroll / 100)}</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-500">
-              <Banknote className="h-5 w-5" />
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground">Salario Medio</p>
-              <p className="text-2xl font-bold" data-testid="text-avg-salary">
-                {employees?.length ? formatCurrency(totalPayroll / employees.length / 100) : formatCurrency(0)}
-              </p>
             </div>
           </div>
         </Card>
