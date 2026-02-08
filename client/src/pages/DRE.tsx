@@ -66,14 +66,11 @@ export default function DRE() {
 
   const storeLabel = selectedStore !== "all" ? getStoreLabel(selectedStore) : null;
 
-  const filterLabel = [
-    monthFilter
-      ? monthFilter.month !== null
-        ? `${MONTH_NAMES[monthFilter.month]} ${monthFilter.year}`
-        : `${monthFilter.year}`
-      : "Todos os periodos",
-    storeLabel ? `Loja: ${storeLabel}` : null,
-  ].filter(Boolean).join(" | ");
+  const filterLabel = monthFilter
+    ? monthFilter.month !== null
+      ? `${MONTH_NAMES[monthFilter.month]} ${monthFilter.year}`
+      : `${monthFilter.year}`
+    : "Todos os periodos";
 
   const filteredTransactions = useMemo(() => {
     if (!transactions) return [];
