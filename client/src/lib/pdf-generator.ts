@@ -25,6 +25,7 @@ interface EmployeeData {
   name: string;
   position: string;
   salary: number;
+  createdAt: string | Date;
 }
 
 export function generateDashboardPDF(
@@ -188,19 +189,20 @@ export function generateTeamPDF(employees: EmployeeData[], totalPayroll: number)
     String(idx + 1),
     emp.name,
     emp.position,
+    format(new Date(emp.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR }),
     formatCurrencyPDF(emp.salary / 100),
   ]);
 
   autoTable(doc, {
     startY: afterSummaryY + 4,
-    head: [["#", "Nome", "Cargo", "Salario Mensal"]],
+    head: [["#", "Nome", "Cargo", "Data de Admissao", "Salario Mensal"]],
     body: empRows,
     theme: "striped",
     headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: "bold", fontSize: 9 },
     bodyStyles: { fontSize: 9 },
     columnStyles: {
       0: { cellWidth: 12, halign: "center" },
-      3: { halign: "right", fontStyle: "bold" },
+      4: { halign: "right", fontStyle: "bold" },
     },
     margin: { left: 14, right: 14 },
   });
