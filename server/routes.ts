@@ -1,19 +1,14 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import type { Server } from "http";
-import { storage } from "./storage";
+import { storage, type UserContext } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
 import { insertEmployeeSchema, insertProductSchema } from "@shared/schema";
 import { setupAuth, registerAuthRoutes, isAuthenticated, getUserId } from "./auth";
 
-async function requireAdmin(req: Request, res: Response, next: NextFunction) {
+async function getCtx(req: Request): Promise<UserContext> {
   const userId = getUserId(req);
-  if (!userId) return res.status(401).json({ message: "Nao autenticado." });
-  const role = await storage.getUserRole(userId);
-  if (role !== "admin") {
-    return res.status(403).json({ message: "Acesso negado. Apenas administradores podem realizar esta acao." });
-  }
-  next();
+  return storage.getUserContext(userId);
 }
 
 async function requireVerified(req: Request, res: Response, next: NextFunction) {
@@ -29,6 +24,26 @@ async function requireVerified(req: Request, res: Response, next: NextFunction) 
   next();
 }
 
+async function requireMaster(req: Request, res: Response, next: NextFunction) {
+  const userId = getUserId(req);
+  if (!userId) return res.status(401).json({ message: "Nao autenticado." });
+  const role = await storage.getUserRole(userId);
+  if (role !== "master") {
+    return res.status(403).json({ message: "Acesso negado. Apenas o Master pode realizar esta acao." });
+  }
+  next();
+}
+
+async function requireMasterOrGerente(req: Request, res: Response, next: NextFunction) {
+  const userId = getUserId(req);
+  if (!userId) return res.status(401).json({ message: "Nao autenticado." });
+  const role = await storage.getUserRole(userId);
+  if (role !== "master" && role !== "gerente") {
+    return res.status(403).json({ message: "Acesso negado. Apenas Master ou Gerente podem realizar esta acao." });
+  }
+  next();
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -38,14 +53,14 @@ export async function registerRoutes(
   registerAuthRoutes(app);
 
   app.get(api.transactions.list.path, isAuthenticated, requireVerified, async (req, res) => {
-    const userId = getUserId(req);
-    const transactions = await storage.getTransactions(userId);
-    res.json(transactions);
+    const ctx = await getCtx(req);
+    const txs = await storage.getTransactions(ctx);
+    res.json(txs);
   });
 
   app.post(api.transactions.create.path, isAuthenticated, requireVerified, async (req, res) => {
     try {
-      const userId = getUserId(req);
+      const ctx = await getCtx(req);
       const { productId, productQty, ...txData } = req.body;
 
       if (txData.dueDate && typeof txData.dueDate === "string") {
@@ -66,17 +81,17 @@ export async function registerRoutes(
         if (isNaN(qty) || qty <= 0) {
           return res.status(400).json({ message: "Quantidade deve ser maior que zero." });
         }
-        const result = await storage.decrementProductStock(pid, qty, userId);
+        const result = await storage.decrementProductStock(pid, qty, ctx);
         if (!result) {
           return res.status(400).json({ message: "Estoque insuficiente ou produto nao encontrado." });
         }
       }
 
       if (input.isRecurring === 1 && input.recurrenceFrequency && (input.recurrenceCount || 0) > 1) {
-        const created = await storage.createTransactionWithRecurrence(input, userId);
+        const created = await storage.createTransactionWithRecurrence(input, ctx);
         res.status(201).json(created[0]);
       } else {
-        const transaction = await storage.createTransaction(input, userId);
+        const transaction = await storage.createTransaction(input, ctx);
         res.status(201).json(transaction);
       }
     } catch (err) {
@@ -90,11 +105,11 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/transactions/:id", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+  app.patch("/api/transactions/:id", isAuthenticated, requireVerified, requireMasterOrGerente, async (req, res) => {
     try {
       const id = parseInt(req.params.id as string);
       if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
-      const userId = getUserId(req);
+      const ctx = await getCtx(req);
 
       const body = { ...req.body };
       if (body.dueDate && typeof body.dueDate === "string") {
@@ -105,7 +120,7 @@ export async function registerRoutes(
       }
 
       const input = api.transactions.create.input.partial().parse(body);
-      const updated = await storage.updateTransaction(id, input, userId);
+      const updated = await storage.updateTransaction(id, input, ctx);
       if (!updated) return res.status(404).json({ message: "Transacao nao encontrada" });
       res.json(updated);
     } catch (err) {
@@ -116,28 +131,28 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/transactions/:id/mark-paid", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+  app.patch("/api/transactions/:id/mark-paid", isAuthenticated, requireVerified, requireMasterOrGerente, async (req, res) => {
     const id = parseInt(req.params.id as string);
     if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
-    const userId = getUserId(req);
+    const ctx = await getCtx(req);
     const paymentDate = req.body.paymentDate ? new Date(req.body.paymentDate) : new Date();
-    const updated = await storage.markAsPaid(id, userId, paymentDate);
+    const updated = await storage.markAsPaid(id, ctx, paymentDate);
     if (!updated) return res.status(404).json({ message: "Transacao nao encontrada" });
     res.json(updated);
   });
 
-  app.patch("/api/transactions/:id/reconcile", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+  app.patch("/api/transactions/:id/reconcile", isAuthenticated, requireVerified, requireMasterOrGerente, async (req, res) => {
     const id = parseInt(req.params.id as string);
     if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
-    const userId = getUserId(req);
-    const updated = await storage.toggleReconciled(id, userId);
+    const ctx = await getCtx(req);
+    const updated = await storage.toggleReconciled(id, ctx);
     if (!updated) return res.status(404).json({ message: "Transacao nao encontrada" });
     res.json(updated);
   });
 
-  app.post("/api/transactions/import-csv", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+  app.post("/api/transactions/import-csv", isAuthenticated, requireVerified, requireMasterOrGerente, async (req, res) => {
     try {
-      const userId = getUserId(req);
+      const ctx = await getCtx(req);
       const { rows } = req.body;
       if (!Array.isArray(rows) || rows.length === 0) {
         return res.status(400).json({ message: "Nenhum dado encontrado no arquivo." });
@@ -178,12 +193,12 @@ export async function registerRoutes(
         }
 
         const category = row.category || row.categoria || null;
-        const store = row.store || row.loja || null;
+        const storeVal = ctx.role !== "master" && ctx.store ? ctx.store : (row.store || row.loja || null);
 
         const [tx] = await (await import("./db")).db
           .insert((await import("@shared/schema")).transactions)
           .values({
-            description, amount, type, category, store, userId, date: dateVal,
+            description, amount, type, category, store: storeVal, userId: ctx.userId, date: dateVal,
             status: "pago",
             paymentDate: dateVal,
           })
@@ -197,12 +212,12 @@ export async function registerRoutes(
     }
   });
 
-  app.delete(api.transactions.delete.path, isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+  app.delete(api.transactions.delete.path, isAuthenticated, requireVerified, requireMasterOrGerente, async (req, res) => {
     const id = parseInt(req.params.id as string);
     if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
     
-    const userId = getUserId(req);
-    const deleted = await storage.deleteTransaction(id, userId);
+    const ctx = await getCtx(req);
+    const deleted = await storage.deleteTransaction(id, ctx);
     if (!deleted) return res.status(404).json({ message: "Transacao nao encontrada" });
     res.status(204).send();
   });
@@ -213,7 +228,7 @@ export async function registerRoutes(
     res.json(settings);
   });
 
-  app.patch(api.settings.update.path, isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+  app.patch(api.settings.update.path, isAuthenticated, requireVerified, requireMaster, async (req, res) => {
     try {
       const userId = getUserId(req);
       const input = api.settings.update.input.parse(req.body);
@@ -231,15 +246,24 @@ export async function registerRoutes(
   });
 
   app.get(api.summary.get.path, isAuthenticated, requireVerified, async (req, res) => {
-    const userId = getUserId(req);
-    const transactions = await storage.getTransactions(userId);
-    const settings = await storage.getSettings(userId);
+    const ctx = await getCtx(req);
+    if (ctx.role === "operador") {
+      return res.json({
+        totalIncome: 0,
+        totalExpenses: 0,
+        taxAmount: 0,
+        netProfit: 0,
+        currentTaxRate: 0,
+      });
+    }
+    const txs = await storage.getTransactions(ctx);
+    const settings = await storage.getSettings(ctx.userId);
     const taxRate = parseFloat(settings.taxRate) || 0;
 
     let totalIncome = 0;
     let totalExpenses = 0;
 
-    for (const t of transactions) {
+    for (const t of txs) {
       if (t.type === 'income') {
         totalIncome += t.amount;
       } else {
@@ -261,31 +285,53 @@ export async function registerRoutes(
 
   app.get("/api/user/role", isAuthenticated, requireVerified, async (req, res) => {
     const userId = getUserId(req);
-    const role = await storage.getUserRole(userId);
-    res.json({ role });
+    const ctx = await storage.getUserContext(userId);
+    res.json({ role: ctx.role, store: ctx.store });
   });
 
-  app.patch("/api/user/role", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
-    const { userId, role } = req.body;
-    if (!userId || !["admin", "operator"].includes(role)) {
+  app.patch("/api/user/role", isAuthenticated, requireVerified, requireMaster, async (req, res) => {
+    const { userId, role, store } = req.body;
+    if (!userId || !["master", "gerente", "operador"].includes(role)) {
       return res.status(400).json({ message: "userId e role sao obrigatorios" });
     }
-    await storage.setUserRole(userId, role);
+    await storage.updateUserRoleAndStore(userId, role, store || null);
     res.json({ message: "Perfil atualizado" });
   });
 
-  // ====== Employee Routes ======
-  app.get("/api/employees", isAuthenticated, requireVerified, async (req, res) => {
+  app.patch("/api/user/profile", isAuthenticated, requireVerified, async (req, res) => {
     const userId = getUserId(req);
-    const emps = await storage.getEmployees(userId);
+    const { cnpjCpf, companyName, firstName, lastName } = req.body;
+    await storage.updateUserProfile(userId, { cnpjCpf, companyName, firstName, lastName });
+    res.json({ message: "Perfil atualizado" });
+  });
+
+  app.get("/api/users", isAuthenticated, requireVerified, requireMaster, async (req, res) => {
+    const allUsers = await storage.getAllUsers();
+    res.json(allUsers.map(u => ({
+      id: u.id,
+      email: u.email,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      role: u.role,
+      store: u.store,
+      cnpjCpf: u.cnpjCpf,
+      companyName: u.companyName,
+      emailVerified: u.emailVerified,
+      createdAt: u.createdAt,
+    })));
+  });
+
+  app.get("/api/employees", isAuthenticated, requireVerified, async (req, res) => {
+    const ctx = await getCtx(req);
+    const emps = await storage.getEmployees(ctx);
     res.json(emps);
   });
 
-  app.post("/api/employees", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+  app.post("/api/employees", isAuthenticated, requireVerified, requireMasterOrGerente, async (req, res) => {
     try {
-      const userId = getUserId(req);
-      const { createdAt, salaryType, ...rest } = req.body;
-      const input = insertEmployeeSchema.omit({ createdAt: true, salaryType: true }).parse(rest);
+      const ctx = await getCtx(req);
+      const { createdAt, salaryType, store, ...rest } = req.body;
+      const input = insertEmployeeSchema.omit({ createdAt: true, salaryType: true, store: true }).parse(rest);
       const employeeData: any = { ...input };
       if (createdAt) {
         employeeData.createdAt = new Date(createdAt);
@@ -294,7 +340,8 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Tipo de salario invalido. Use 'monthly' ou 'daily'." });
       }
       employeeData.salaryType = salaryType || "monthly";
-      const employee = await storage.createEmployee(employeeData, userId);
+      employeeData.store = store || ctx.store || "fazenda";
+      const employee = await storage.createEmployee(employeeData, ctx);
       res.status(201).json(employee);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -304,20 +351,23 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/employees/:id", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+  app.patch("/api/employees/:id", isAuthenticated, requireVerified, requireMasterOrGerente, async (req, res) => {
     try {
       const id = parseInt(req.params.id as string);
       if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
-      const userId = getUserId(req);
-      const { salaryType, ...rest } = req.body;
-      const input: any = insertEmployeeSchema.partial().omit({ salaryType: true }).parse(rest);
+      const ctx = await getCtx(req);
+      const { salaryType, store, ...rest } = req.body;
+      const input: any = insertEmployeeSchema.partial().omit({ salaryType: true, store: true }).parse(rest);
       if (salaryType !== undefined) {
         if (!["monthly", "daily"].includes(salaryType)) {
           return res.status(400).json({ message: "Tipo de salario invalido. Use 'monthly' ou 'daily'." });
         }
         input.salaryType = salaryType;
       }
-      const employee = await storage.updateEmployee(id, input, userId);
+      if (store !== undefined) {
+        input.store = store;
+      }
+      const employee = await storage.updateEmployee(id, input, ctx);
       if (!employee) return res.status(404).json({ message: "Funcionario nao encontrado" });
       res.json(employee);
     } catch (err) {
@@ -328,51 +378,50 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/employees/:id", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+  app.delete("/api/employees/:id", isAuthenticated, requireVerified, requireMasterOrGerente, async (req, res) => {
     const id = parseInt(req.params.id as string);
     if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
-    const userId = getUserId(req);
-    const deleted = await storage.deleteEmployee(id, userId);
+    const ctx = await getCtx(req);
+    const deleted = await storage.deleteEmployee(id, ctx);
     if (!deleted) return res.status(404).json({ message: "Funcionario nao encontrado" });
     res.status(204).send();
   });
 
-  app.post("/api/employees/:id/pay", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+  app.post("/api/employees/:id/pay", isAuthenticated, requireVerified, requireMasterOrGerente, async (req, res) => {
     const id = parseInt(req.params.id as string);
     if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
-    const userId = getUserId(req);
-    const tx = await storage.processPayrollForEmployee(id, userId);
+    const ctx = await getCtx(req);
+    const tx = await storage.processPayrollForEmployee(id, ctx);
     if (!tx) return res.status(404).json({ message: "Funcionario nao encontrado" });
     res.status(201).json({ message: `Pagamento lancado para o funcionario.`, transaction: tx });
   });
 
-  app.post("/api/employees/payroll", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
-    const userId = getUserId(req);
-    const emps = await storage.getEmployees(userId);
+  app.post("/api/employees/payroll", isAuthenticated, requireVerified, requireMasterOrGerente, async (req, res) => {
+    const ctx = await getCtx(req);
+    const emps = await storage.getEmployees(ctx);
     if (emps.length === 0) {
       return res.status(400).json({ message: "Nenhum funcionario cadastrado para processar folha de pagamento." });
     }
-    const txs = await storage.processPayroll(userId);
+    const txs = await storage.processPayroll(ctx);
     res.status(201).json({ message: `Folha de pagamento processada. ${txs.length} lancamento(s) criado(s).`, transactions: txs });
   });
 
-  // ====== Product Routes ======
   app.get("/api/products", isAuthenticated, requireVerified, async (req, res) => {
-    const userId = getUserId(req);
-    const prods = await storage.getProducts(userId);
+    const ctx = await getCtx(req);
+    const prods = await storage.getProducts(ctx);
     res.json(prods);
   });
 
-  app.post("/api/products", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+  app.post("/api/products", isAuthenticated, requireVerified, async (req, res) => {
     try {
-      const userId = getUserId(req);
+      const ctx = await getCtx(req);
       const { createdAt, ...rest } = req.body;
       const input = insertProductSchema.omit({ createdAt: true }).parse(rest);
       const productData: any = { ...input };
       if (createdAt) {
         productData.createdAt = new Date(createdAt);
       }
-      const product = await storage.createProduct(productData, userId);
+      const product = await storage.createProduct(productData, ctx);
       res.status(201).json(product);
     } catch (err) {
       if (err instanceof z.ZodError) {
@@ -382,13 +431,13 @@ export async function registerRoutes(
     }
   });
 
-  app.patch("/api/products/:id", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+  app.patch("/api/products/:id", isAuthenticated, requireVerified, requireMasterOrGerente, async (req, res) => {
     try {
       const id = parseInt(req.params.id as string);
       if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
-      const userId = getUserId(req);
+      const ctx = await getCtx(req);
       const input = insertProductSchema.partial().parse(req.body);
-      const product = await storage.updateProduct(id, input, userId);
+      const product = await storage.updateProduct(id, input, ctx);
       if (!product) return res.status(404).json({ message: "Produto nao encontrado" });
       res.json(product);
     } catch (err) {
@@ -399,11 +448,11 @@ export async function registerRoutes(
     }
   });
 
-  app.delete("/api/products/:id", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+  app.delete("/api/products/:id", isAuthenticated, requireVerified, requireMasterOrGerente, async (req, res) => {
     const id = parseInt(req.params.id as string);
     if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
-    const userId = getUserId(req);
-    const deleted = await storage.deleteProduct(id, userId);
+    const ctx = await getCtx(req);
+    const deleted = await storage.deleteProduct(id, ctx);
     if (!deleted) return res.status(404).json({ message: "Produto nao encontrado" });
     res.status(204).send();
   });
@@ -411,37 +460,34 @@ export async function registerRoutes(
   app.patch("/api/user/make-admin", isAuthenticated, requireVerified, async (req, res) => {
     const userId = getUserId(req);
     const role = await storage.getUserRole(userId);
-    if (role === "admin") {
-      return res.json({ message: "Ja e admin", role: "admin" });
+    if (role === "master") {
+      return res.json({ message: "Ja e master", role: "master" });
     }
 
     const { db } = await import("./db");
     const { users } = await import("@shared/schema");
     const { eq, and, ne, sql } = await import("drizzle-orm");
 
-    const existingAdmins = await db.select({ count: sql<number>`count(*)` })
+    const existingMasters = await db.select({ count: sql<number>`count(*)` })
       .from(users)
-      .where(and(eq(users.role, "admin"), ne(users.id, userId)));
+      .where(and(eq(users.role, "master"), ne(users.id, userId)));
 
-    if (Number(existingAdmins[0].count) > 0) {
-      return res.status(403).json({ message: "Ja existe um administrador." });
+    if (Number(existingMasters[0].count) > 0) {
+      return res.status(403).json({ message: "Ja existe um Master." });
     }
 
     await db.update(users)
-      .set({ role: "admin" })
+      .set({ role: "master" })
       .where(eq(users.id, userId));
 
-    return res.json({ message: "Primeiro usuario promovido a admin", role: "admin" });
+    return res.json({ message: "Primeiro usuario promovido a master", role: "master" });
   });
 
-  // ====== Email Notification: Due Accounts Summary ======
   app.get("/api/notifications/due-today", isAuthenticated, requireVerified, async (req, res) => {
-    const userId = getUserId(req);
-    const allTx = await storage.getTransactions(userId);
+    const ctx = await getCtx(req);
+    const allTx = await storage.getTransactions(ctx);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(today);
-    todayEnd.setHours(23, 59, 59, 999);
 
     const dueTodayTx = allTx.filter((tx) => {
       if (tx.status !== "pendente" || !tx.dueDate) return false;

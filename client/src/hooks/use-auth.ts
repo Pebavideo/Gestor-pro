@@ -6,6 +6,9 @@ interface AuthUser {
   firstName: string | null;
   lastName: string | null;
   role: string;
+  store: string | null;
+  cnpjCpf: string | null;
+  companyName: string | null;
   emailVerified: boolean;
   profileImageUrl: string | null;
 }
@@ -26,17 +29,21 @@ async function fetchUser(): Promise<AuthUser | null> {
   return response.json();
 }
 
-async function fetchRole(): Promise<string> {
+interface RoleData {
+  role: string;
+  store: string | null;
+}
+
+async function fetchRole(): Promise<RoleData> {
   const response = await fetch("/api/user/role", {
     credentials: "include",
   });
 
   if (!response.ok) {
-    return "operator";
+    return { role: "operador", store: null };
   }
 
-  const data = await response.json();
-  return data.role;
+  return response.json();
 }
 
 export function useAuth() {
@@ -48,7 +55,7 @@ export function useAuth() {
     staleTime: 1000 * 60 * 5,
   });
 
-  const { data: role } = useQuery<string>({
+  const { data: roleData } = useQuery<RoleData>({
     queryKey: ["/api/user/role"],
     queryFn: fetchRole,
     enabled: !!user && user.emailVerified,
@@ -66,13 +73,21 @@ export function useAuth() {
     },
   });
 
+  const role = roleData?.role || user?.role || "operador";
+  const userStore = roleData?.store || user?.store || null;
+
   return {
     user,
     isLoading,
     isAuthenticated: !!user,
     isVerified: !!user?.emailVerified,
-    role: role || "operator",
-    isAdmin: role === "admin",
+    role,
+    userStore,
+    isMaster: role === "master",
+    isGerente: role === "gerente",
+    isOperador: role === "operador",
+    isAdmin: role === "master",
+    canManage: role === "master" || role === "gerente",
     logout: logoutMutation.mutate,
     isLoggingOut: logoutMutation.isPending,
   };

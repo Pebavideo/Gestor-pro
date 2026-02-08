@@ -21,10 +21,25 @@ export const users = pgTable("users", {
   emailVerified: boolean("email_verified").notNull().default(false),
   verificationCode: varchar("verification_code"),
   verificationCodeExpiresAt: timestamp("verification_code_expires_at"),
-  role: varchar("role").notNull().default("operator"),
+  role: varchar("role").notNull().default("operador"),
+  store: varchar("store"),
+  cnpjCpf: varchar("cnpj_cpf"),
+  companyName: varchar("company_name"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
+
+export const ROLE_OPTIONS = [
+  { value: "master", label: "Master" },
+  { value: "gerente", label: "Gerente" },
+  { value: "operador", label: "Operador" },
+] as const;
+
+export function getRoleLabel(value: string | null | undefined): string {
+  if (!value) return "Operador";
+  const found = ROLE_OPTIONS.find((o) => o.value === value);
+  return found ? found.label : value;
+}
 
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;

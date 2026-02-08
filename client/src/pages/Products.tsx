@@ -16,7 +16,7 @@ import { Plus, Package, Pencil, Trash2, PackageOpen, ShoppingBag, Clock, ArrowDo
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CurrencyInput, parseBRL, centsToFormatted } from "@/components/CurrencyInput";
-import { STORE_OPTIONS, getStoreLabel } from "@/components/CreateTransactionDialog";
+import { STORE_OPTIONS, getStoreLabel } from "@shared/schema";
 import type { Product } from "@shared/schema";
 
 const UNIT_OPTIONS = [
@@ -37,7 +37,7 @@ function formatUnit(unit: string): string {
 }
 
 export default function Products() {
-  const { isAdmin } = useAuth();
+  const { canManage, isOperador } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -228,7 +228,7 @@ export default function Products() {
           <h2 className="text-2xl font-bold tracking-tight" data-testid="text-products-title">Gestao de Produtos</h2>
           <p className="text-muted-foreground mt-1">Cadastre e gerencie seu estoque de produtos.</p>
         </div>
-        {isAdmin && (
+        {canManage && (
           <Button onClick={openCreate} className="rounded-xl px-6" data-testid="button-add-product">
             <Plus className="mr-2 h-5 w-5" /> Novo Produto
           </Button>
@@ -296,7 +296,7 @@ export default function Products() {
                 <TableHead>Data de Entrada</TableHead>
                 <TableHead className="text-right">Qtd. Estoque</TableHead>
                 <TableHead className="text-right">Preco Sugerido</TableHead>
-                {isAdmin && <TableHead className="text-right pr-6">Acoes</TableHead>}
+                {canManage && <TableHead className="text-right pr-6">Acoes</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -338,7 +338,7 @@ export default function Products() {
                   <TableCell className="text-right font-mono font-medium" data-testid={`text-product-price-${p.id}`}>
                     {formatCurrency(p.price / 100)}
                   </TableCell>
-                  {isAdmin && (
+                  {canManage && (
                     <TableCell className="text-right pr-6">
                       <div className="flex items-center justify-end gap-1">
                         <Button variant="ghost" size="icon" onClick={() => openEdit(p)} data-testid={`button-edit-product-${p.id}`}>
@@ -404,7 +404,7 @@ export default function Products() {
                     </p>
                   </div>
                 </div>
-                {isAdmin && (
+                {canManage && (
                   <div className="flex items-center gap-1 shrink-0">
                     <Button variant="ghost" size="icon" onClick={() => openEdit(p)} data-testid={`button-edit-product-${p.id}`}>
                       <Pencil className="h-4 w-4" />

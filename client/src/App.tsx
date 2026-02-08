@@ -30,10 +30,14 @@ import {
 } from "@/components/ui/sidebar";
 import { Layers, LayoutDashboard, Users, Package, LogOut, BarChart3 } from "lucide-react";
 import { SettingsDialog } from "@/components/SettingsDialog";
+import { ProfileDialog } from "@/components/ProfileDialog";
+import { UserManagementDialog } from "@/components/UserManagementDialog";
 import { useEffect } from "react";
+import { getStoreLabel } from "@shared/schema";
+import { getRoleLabel } from "@shared/models/auth";
 
 function AppSidebar() {
-  const { user, isAdmin, role, logout } = useAuth();
+  const { user, isMaster, isGerente, isOperador, role, userStore, logout } = useAuth();
   const [location, navigate] = useLocation();
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -42,10 +46,10 @@ function AppSidebar() {
     : "U";
 
   const navItems = [
-    { path: "/", label: "Painel Financeiro", icon: LayoutDashboard, testId: "dashboard" },
-    { path: "/dre", label: "DRE", icon: BarChart3, testId: "dre" },
-    { path: "/produtos", label: "Produtos", icon: Package, testId: "products" },
-    { path: "/equipe", label: "Gestao de Equipe", icon: Users, testId: "team" },
+    { path: "/", label: "Painel Financeiro", icon: LayoutDashboard, testId: "dashboard", visible: true },
+    { path: "/dre", label: "DRE", icon: BarChart3, testId: "dre", visible: !isOperador },
+    { path: "/produtos", label: "Produtos", icon: Package, testId: "products", visible: true },
+    { path: "/equipe", label: "Gestao de Equipe", icon: Users, testId: "team", visible: true },
   ];
 
   const handleNav = (path: string) => {
@@ -54,6 +58,10 @@ function AppSidebar() {
       setOpenMobile(false);
     }
   };
+
+  const roleColor = isMaster ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" :
+    isGerente ? "bg-blue-500/15 text-blue-600 dark:text-blue-400" :
+    "bg-muted text-muted-foreground";
 
   return (
     <Sidebar>
@@ -74,7 +82,7 @@ function AppSidebar() {
           <SidebarGroupLabel>Navegacao</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => {
+              {navItems.filter(item => item.visible).map((item) => {
                 const isActive = location === item.path;
                 return (
                   <SidebarMenuItem key={item.path}>
@@ -96,7 +104,9 @@ function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="p-3 space-y-2">
-        {isAdmin && <SettingsDialog />}
+        {isMaster && <SettingsDialog />}
+        {isMaster && <UserManagementDialog />}
+        <ProfileDialog />
         <div className="flex items-center gap-3 px-2 py-2">
           <Avatar className="h-8 w-8">
             <AvatarImage src={user?.profileImageUrl || ""} />
@@ -106,9 +116,16 @@ function AppSidebar() {
             <p className="text-sm font-medium truncate" data-testid="text-username">
               {user?.firstName || user?.email || "Usuario"}
             </p>
-            <Badge variant="secondary" className="text-[10px] px-1.5 py-0" data-testid="badge-role">
-              {role === "admin" ? "Admin" : "Operador"}
-            </Badge>
+            <div className="flex items-center gap-1 flex-wrap">
+              <Badge variant="secondary" className={`text-[10px] px-1.5 py-0 ${roleColor}`} data-testid="badge-role">
+                {getRoleLabel(role)}
+              </Badge>
+              {userStore && (
+                <Badge variant="outline" className="text-[10px] px-1.5 py-0" data-testid="badge-user-store">
+                  {getStoreLabel(userStore)}
+                </Badge>
+              )}
+            </div>
           </div>
           <Button variant="ghost" size="icon" onClick={() => { logout(); if (isMobile) setOpenMobile(false); }} data-testid="button-logout">
             <LogOut className="h-4 w-4" />
@@ -127,8 +144,9 @@ function AppLayout() {
       try {
         const res = await fetch("/api/user/make-admin", { method: "PATCH", credentials: "include" });
         const data = await res.json();
-        if (res.ok && data.role === "admin") {
+        if (res.ok && data.role === "master") {
           qc.invalidateQueries({ queryKey: ["/api/user/role"] });
+          qc.invalidateQueries({ queryKey: ["/api/auth/user"] });
         }
       } catch {}
     }

@@ -73,7 +73,7 @@ export function registerAuthRoutes(app: Express) {
           emailVerified: false,
           verificationCode,
           verificationCodeExpiresAt,
-          role: "operator",
+          role: "operador",
         })
         .returning();
 
@@ -265,6 +265,9 @@ export function registerAuthRoutes(app: Express) {
         firstName: user.firstName,
         lastName: user.lastName,
         role: user.role,
+        store: user.store,
+        cnpjCpf: user.cnpjCpf,
+        companyName: user.companyName,
         emailVerified: user.emailVerified,
         profileImageUrl: user.profileImageUrl,
         createdAt: user.createdAt,

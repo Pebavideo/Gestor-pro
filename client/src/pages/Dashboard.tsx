@@ -34,7 +34,7 @@ const MONTH_NAMES = [
 export default function Dashboard() {
   const { data: transactions, isLoading: txLoading } = useTransactions();
   const { data: settingsData, isLoading: settingsLoading } = useSettings();
-  const { isAdmin } = useAuth();
+  const { canManage, isOperador } = useAuth();
   const importCSV = useImportCSV();
   const { toast } = useToast();
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -329,7 +329,7 @@ export default function Dashboard() {
             )}
           </div>
           <CreateTransactionDialog />
-          {isAdmin && (
+          {canManage && (
             <>
               <input
                 ref={csvInputRef}

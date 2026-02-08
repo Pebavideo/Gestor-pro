@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { CurrencyInput, parseBRL, centsToFormatted } from "@/components/CurrencyInput";
 import { Trash2, ArrowUpRight, ArrowDownRight, Inbox, Pencil, Share2, CheckCircle2, Circle, DollarSign, AlertTriangle, Clock } from "lucide-react";
 import { generateWhatsAppMessage, openWhatsApp } from "@/lib/pdf-generator";
-import { STORE_OPTIONS, getStoreLabel } from "@/components/CreateTransactionDialog";
+import { STORE_OPTIONS, getStoreLabel } from "@shared/schema";
 import { CATEGORY_OPTIONS, getCategoryLabel, getStatusLabel } from "@shared/schema";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -75,7 +75,7 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
   const updateMutation = useUpdateTransaction();
   const reconcileMutation = useToggleReconciled();
   const markPaidMutation = useMarkAsPaid();
-  const { isAdmin } = useAuth();
+  const { canManage } = useAuth();
 
   const [editTx, setEditTx] = useState<Transaction | null>(null);
   const [editDescription, setEditDescription] = useState("");
@@ -215,7 +215,7 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
                     {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount / 100)}
                   </TableCell>
                   <TableCell className="text-center">
-                    {isAdmin ? (
+                    {canManage ? (
                       <Button
                         variant="ghost"
                         size="icon"
@@ -240,7 +240,7 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
                   </TableCell>
                   <TableCell className="text-right pr-6">
                     <div className="flex items-center justify-end gap-1">
-                      {isAdmin && tx.status === "pendente" && (
+                      {canManage && tx.status === "pendente" && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -269,7 +269,7 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
                       >
                         <Share2 className="h-4 w-4" />
                       </Button>
-                      {isAdmin && (
+                      {canManage && (
                         <>
                           <Button
                             variant="ghost"
@@ -384,7 +384,7 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
                       {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount / 100)}
                     </span>
                     <div className="flex items-center gap-1">
-                      {isAdmin && tx.status === "pendente" && (
+                      {canManage && tx.status === "pendente" && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -396,7 +396,7 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
                           <DollarSign className="h-4 w-4 text-emerald-600" />
                         </Button>
                       )}
-                      {isAdmin && (
+                      {canManage && (
                         <Button
                           variant="ghost"
                           size="icon"
@@ -429,7 +429,7 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
                       >
                         <Share2 className="h-4 w-4" />
                       </Button>
-                      {isAdmin && (
+                      {canManage && (
                         <>
                           <Button
                             variant="ghost"

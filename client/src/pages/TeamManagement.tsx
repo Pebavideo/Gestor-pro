@@ -22,6 +22,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Label } from "@/components/ui/label";
 import type { Employee } from "@shared/schema";
+import { STORE_OPTIONS, getStoreLabel } from "@shared/schema";
 
 const employeeFormSchema = z.object({
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
@@ -46,7 +47,7 @@ function useEmployees() {
 }
 
 export default function TeamManagement() {
-  const { isAdmin } = useAuth();
+  const { isMaster, isGerente, isOperador, userStore, canManage } = useAuth();
   const { data: employees, isLoading } = useEmployees();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -55,6 +56,8 @@ export default function TeamManagement() {
   const [admissionDate, setAdmissionDate] = useState("");
   const [salaryType, setSalaryType] = useState<string>("monthly");
   const [editSalaryType, setEditSalaryType] = useState<string>("monthly");
+  const [formStore, setFormStore] = useState<string>("fazenda");
+  const [editStore, setEditStore] = useState<string>("fazenda");
 
   const getNowDatetimeLocal = () => {
     const now = new Date();
@@ -76,7 +79,8 @@ export default function TeamManagement() {
   const createMutation = useMutation({
     mutationFn: async (data: EmployeeFormData) => {
       const salaryInCents = Math.round(parseBRL(data.salary) * 100);
-      const payload: any = { name: data.name, position: data.position, salary: salaryInCents, salaryType };
+      const store = isMaster ? formStore : (userStore || "fazenda");
+      const payload: any = { name: data.name, position: data.position, salary: salaryInCents, salaryType, store };
       if (admissionDate) {
         payload.createdAt = new Date(admissionDate).toISOString();
       }
@@ -98,6 +102,7 @@ export default function TeamManagement() {
       createForm.reset();
       setAdmissionDate("");
       setSalaryType("monthly");
+      setFormStore("fazenda");
       setCreateOpen(false);
     },
     onError: (error: Error) => {
@@ -111,7 +116,7 @@ export default function TeamManagement() {
       const res = await fetch(`/api/employees/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: data.name, position: data.position, salary: salaryInCents, salaryType: editSalaryType }),
+        body: JSON.stringify({ name: data.name, position: data.position, salary: salaryInCents, salaryType: editSalaryType, store: editStore }),
         credentials: "include",
       });
       if (!res.ok) {
@@ -194,6 +199,7 @@ export default function TeamManagement() {
   function openEdit(emp: Employee) {
     setEditingEmployee(emp);
     setEditSalaryType(emp.salaryType || "monthly");
+    setEditStore(emp.store || "fazenda");
     editForm.reset({
       name: emp.name,
       position: emp.position,
@@ -241,7 +247,7 @@ export default function TeamManagement() {
           >
             <Mail className="h-4 w-4" />
           </Button>
-          {isAdmin && (
+          {canManage && (
             <>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
@@ -343,6 +349,25 @@ export default function TeamManagement() {
                         </Select>
                       </div>
                       <div className="space-y-2">
+                        <Label>Unidade</Label>
+                        {isMaster ? (
+                          <Select value={formStore} onValueChange={setFormStore}>
+                            <SelectTrigger data-testid="select-employee-store">
+                              <SelectValue placeholder="Selecione a unidade" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {STORE_OPTIONS.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <p className="text-sm text-muted-foreground py-2" data-testid="text-employee-store-readonly">
+                            {getStoreLabel(userStore)}
+                          </p>
+                        )}
+                      </div>
+                      <div className="space-y-2">
                         <Label htmlFor="employee-admission-date">Data de Admissao</Label>
                         <Input
                           id="employee-admission-date"
@@ -407,7 +432,7 @@ export default function TeamManagement() {
           </div>
           <h3 className="text-lg font-semibold text-foreground">Nenhum funcionario cadastrado</h3>
           <p className="max-w-xs mx-auto mt-2">
-            {isAdmin
+            {canManage
               ? "Clique em 'Novo Funcionario' para adicionar membros da equipe."
               : "Nenhum funcionario foi cadastrado pelo administrador."}
           </p>
@@ -420,9 +445,10 @@ export default function TeamManagement() {
                 <TableRow className="hover:bg-transparent border-border/50">
                   <TableHead className="pl-6">Nome</TableHead>
                   <TableHead>Cargo</TableHead>
+                  <TableHead>Unidade</TableHead>
                   <TableHead>Data de Admissao</TableHead>
                   <TableHead className="text-right">Salario</TableHead>
-                  {isAdmin && <TableHead className="text-right pr-6">Acoes</TableHead>}
+                  {canManage && <TableHead className="text-right pr-6">Acoes</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -445,6 +471,11 @@ export default function TeamManagement() {
                         {emp.position}
                       </Badge>
                     </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" data-testid={`badge-employee-store-${emp.id}`}>
+                        {getStoreLabel(emp.store)}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="text-muted-foreground font-mono text-sm">
                       <div className="flex items-center gap-1.5" data-testid={`text-employee-date-${emp.id}`}>
                         <Clock className="w-3.5 h-3.5" />
@@ -459,7 +490,7 @@ export default function TeamManagement() {
                         <span className="font-mono font-medium">{formatCurrency(emp.salary / 100)}</span>
                       </div>
                     </TableCell>
-                    {isAdmin && (
+                    {canManage && (
                       <TableCell className="text-right pr-6">
                         <div className="flex items-center justify-end gap-1">
                           <Button
@@ -565,9 +596,14 @@ export default function TeamManagement() {
                     </div>
                     <div className="min-w-0">
                       <p className="font-medium truncate" data-testid={`card-text-employee-name-${emp.id}`}>{emp.name}</p>
-                      <Badge variant="secondary" className="mt-1" data-testid={`card-text-employee-position-${emp.id}`}>
-                        {emp.position}
-                      </Badge>
+                      <div className="flex items-center gap-1 mt-1 flex-wrap">
+                        <Badge variant="secondary" data-testid={`card-text-employee-position-${emp.id}`}>
+                          {emp.position}
+                        </Badge>
+                        <Badge variant="secondary" data-testid={`badge-employee-store-${emp.id}`}>
+                          {getStoreLabel(emp.store)}
+                        </Badge>
+                      </div>
                       <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1" data-testid={`card-text-employee-date-${emp.id}`}>
                         <Clock className="w-3 h-3" />
                         {format(new Date(emp.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}
@@ -587,7 +623,7 @@ export default function TeamManagement() {
                       {formatCurrency(emp.salary / 100)}
                     </p>
                   </div>
-                  {isAdmin && (
+                  {canManage && (
                     <div className="flex items-center gap-1">
                       <Button
                         variant="ghost"
@@ -745,6 +781,25 @@ export default function TeamManagement() {
                   </SelectContent>
                 </Select>
               </div>
+              <div className="space-y-2">
+                <Label>Unidade</Label>
+                {isMaster ? (
+                  <Select value={editStore} onValueChange={setEditStore}>
+                    <SelectTrigger data-testid="select-edit-employee-store">
+                      <SelectValue placeholder="Selecione a unidade" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {STORE_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <p className="text-sm text-muted-foreground py-2" data-testid="text-edit-employee-store-readonly">
+                    {getStoreLabel(editStore)}
+                  </p>
+                )}
+              </div>
             </form>
           </Form>
           <DialogFooter>
@@ -765,6 +820,7 @@ export default function TeamManagement() {
               <th>#</th>
               <th>Nome</th>
               <th>Cargo</th>
+              <th>Unidade</th>
               <th>Data de Admissao</th>
               <th>Tipo</th>
               <th>Salario</th>
@@ -776,6 +832,7 @@ export default function TeamManagement() {
                 <td>{idx + 1}</td>
                 <td>{emp.name}</td>
                 <td>{emp.position}</td>
+                <td>{getStoreLabel(emp.store)}</td>
                 <td>{format(new Date(emp.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}</td>
                 <td>{emp.salaryType === "daily" ? "Diaria" : "Mensal"}</td>
                 <td>{formatCurrency(emp.salary / 100)}</td>

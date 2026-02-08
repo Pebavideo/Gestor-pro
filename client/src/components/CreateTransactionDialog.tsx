@@ -18,20 +18,10 @@ import { CurrencyInput, parseBRL, formatBRL } from "@/components/CurrencyInput";
 import { Plus, ArrowUpCircle, ArrowDownCircle, Repeat, CalendarClock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Product } from "@shared/schema";
-import { CATEGORY_OPTIONS, getCategoryLabel, RECURRENCE_OPTIONS } from "@shared/schema";
+import { CATEGORY_OPTIONS, getCategoryLabel, RECURRENCE_OPTIONS, STORE_OPTIONS, getStoreLabel } from "@shared/schema";
+import { useAuth } from "@/hooks/use-auth";
 
-export const STORE_OPTIONS = [
-  { value: "fazenda", label: "Fazenda" },
-  { value: "loja_manel", label: "Loja do Manel" },
-  { value: "loja_maria", label: "Loja da Maria" },
-  { value: "mercado_ze", label: "Mercado do Ze" },
-];
-
-export function getStoreLabel(value: string | null | undefined): string {
-  if (!value) return "";
-  const found = STORE_OPTIONS.find((o) => o.value === value);
-  return found ? found.label : value;
-}
+export { STORE_OPTIONS, getStoreLabel };
 
 const formSchema = z.object({
   description: z.string().min(3, "Descricao muito curta"),
@@ -56,6 +46,7 @@ export function CreateTransactionDialog() {
   const [open, setOpen] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { isMaster, userStore } = useAuth();
 
   const { data: products = [] } = useQuery<Product[]>({
     queryKey: ["/api/products"],
@@ -132,7 +123,9 @@ export function CreateTransactionDialog() {
     if (values.category && values.category !== "none") {
       payload.category = values.category;
     }
-    if (values.store && values.store !== "none") {
+    if (!isMaster && userStore) {
+      payload.store = userStore;
+    } else if (values.store && values.store !== "none") {
       payload.store = values.store;
     }
 
@@ -290,31 +283,40 @@ export function CreateTransactionDialog() {
               />
             )}
 
-            <FormField
-              control={form.control}
-              name="store"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Loja / Origem</FormLabel>
-                  <Select value={field.value || "none"} onValueChange={field.onChange}>
-                    <FormControl>
-                      <SelectTrigger data-testid="select-store">
-                        <SelectValue placeholder="Selecionar loja..." />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="none">Nenhuma</SelectItem>
-                      {STORE_OPTIONS.map((opt) => (
-                        <SelectItem key={opt.value} value={opt.value} data-testid={`option-store-${opt.value}`}>
-                          {opt.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {isMaster ? (
+              <FormField
+                control={form.control}
+                name="store"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Loja / Origem</FormLabel>
+                    <Select value={field.value || "none"} onValueChange={field.onChange}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-store">
+                          <SelectValue placeholder="Selecionar loja..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">Nenhuma</SelectItem>
+                        {STORE_OPTIONS.map((opt) => (
+                          <SelectItem key={opt.value} value={opt.value} data-testid={`option-store-${opt.value}`}>
+                            {opt.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            ) : userStore ? (
+              <div className="space-y-2">
+                <FormLabel>Unidade</FormLabel>
+                <div className="p-2 text-sm bg-muted rounded-md" data-testid="text-assigned-store">
+                  {getStoreLabel(userStore)}
+                </div>
+              </div>
+            ) : null}
 
             <FormField
               control={form.control}

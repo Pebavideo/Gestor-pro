@@ -11,8 +11,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CalendarDays, FileDown, Mail, TrendingUp, TrendingDown, ArrowDown, ArrowUp, Store, Eye } from "lucide-react";
 import { generateDREPDF, openEmailDRE } from "@/lib/pdf-generator";
-import { STORE_OPTIONS, getStoreLabel } from "@/components/CreateTransactionDialog";
-import { getCategoryLabel } from "@shared/schema";
+import { STORE_OPTIONS, getStoreLabel, getCategoryLabel } from "@shared/schema";
+import { useAuth } from "@/hooks/use-auth";
 
 const MONTH_NAMES = [
   "Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho",
@@ -35,6 +35,7 @@ interface DRELine {
 export default function DRE() {
   const { data: transactions, isLoading: txLoading } = useTransactions();
   const { data: settingsData, isLoading: settingsLoading } = useSettings();
+  const { isOperador, userStore, isMaster } = useAuth();
 
   const [periodMode, setPeriodMode] = useState<PeriodMode>("monthly");
   const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
@@ -256,6 +257,16 @@ export default function DRE() {
   }
 
   const isComp = viewMode === "comparativo";
+
+  if (isOperador) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <Card className="p-8 text-center max-w-md">
+          <p className="text-muted-foreground">Voce nao tem permissao para acessar o DRE.</p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

@@ -41,6 +41,19 @@ export const RECURRENCE_OPTIONS = [
   { value: "quinzenal", label: "Quinzenal" },
 ] as const;
 
+export const STORE_OPTIONS = [
+  { value: "fazenda", label: "Fazenda" },
+  { value: "loja_manel", label: "Loja do Manel" },
+  { value: "loja_maria", label: "Loja da Maria" },
+  { value: "mercado_ze", label: "Mercado do Ze" },
+] as const;
+
+export function getStoreLabel(value: string | null | undefined): string {
+  if (!value) return "";
+  const found = STORE_OPTIONS.find((o) => o.value === value);
+  return found ? found.label : value;
+}
+
 export const transactions = pgTable("transactions", {
   id: serial("id").primaryKey(),
   description: text("description").notNull(),
@@ -72,6 +85,7 @@ export const employees = pgTable("employees", {
   position: text("position").notNull(),
   salary: integer("salary").notNull(),
   salaryType: text("salary_type").notNull().default("monthly"),
+  store: text("store").notNull().default("fazenda"),
   userId: varchar("user_id").notNull(),
   active: integer("active").notNull().default(1),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -95,6 +109,7 @@ export const insertEmployeeSchema = createInsertSchema(employees).pick({
   position: true,
   salary: true,
   salaryType: true,
+  store: true,
   createdAt: true,
 });
 
