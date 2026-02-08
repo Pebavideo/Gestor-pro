@@ -2,24 +2,72 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { useCreateTransaction } from "@/hooks/use-transactions";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { formatCurrency } from "@/hooks/use-transactions";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import { Plus, ArrowUpCircle, ArrowDownCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { Product } from "@shared/schema";
 
 const formSchema = z.object({
-  description: z.string().min(3, "Descrição muito curta"),
+  description: z.string().min(3, "Descricao muito curta"),
   amount: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, "Valor deve ser maior que 0"),
   type: z.enum(["income", "expense"]),
+  productId: z.string().optional(),
+  productQty: z.string().optional(),
 });
 
 export function CreateTransactionDialog() {
   const [open, setOpen] = useState(false);
-  const { mutate, isPending } = useCreateTransaction();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const { data: products = [] } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
+    queryFn: async () => {
+      const res = await fetch("/api/products", { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: async (payload: {
+      description: string;
+      amount: number;
+      type: string;
+      productId?: number;
+      productQty?: number;
+    }) => {
+      const res = await apiRequest("POST", "/api/transactions", payload);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      toast({
+        title: "Transacao registrada",
+        description: "A movimentacao foi salva com sucesso.",
+      });
+      setOpen(false);
+      form.reset();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Erro ao salvar",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -27,37 +75,64 @@ export function CreateTransactionDialog() {
       description: "",
       amount: "",
       type: "income",
+      productId: "",
+      productQty: "1",
     },
   });
 
+  const watchType = form.watch("type");
+  const watchProductId = form.watch("productId");
+
+  const selectedProduct = watchProductId && watchProductId !== "none"
+    ? products.find((p) => p.id === parseInt(watchProductId))
+    : null;
+
   function onSubmit(values: z.infer<typeof formSchema>) {
-    // Convert string amount to cents integer
     const amountInCents = Math.round(parseFloat(values.amount.replace(",", ".")) * 100);
-    
-    mutate({
+
+    const payload: {
+      description: string;
+      amount: number;
+      type: string;
+      productId?: number;
+      productQty?: number;
+    } = {
       description: values.description,
       amount: amountInCents,
       type: values.type,
-    }, {
-      onSuccess: () => {
-        setOpen(false);
-        form.reset();
+    };
+
+    if (values.type === "income" && values.productId && values.productId !== "none") {
+      payload.productId = parseInt(values.productId);
+      payload.productQty = parseInt(values.productQty || "1") || 1;
+    }
+
+    createMutation.mutate(payload);
+  }
+
+  function onProductSelect(productId: string) {
+    form.setValue("productId", productId);
+    if (productId && productId !== "none") {
+      const product = products.find((p) => p.id === parseInt(productId));
+      if (product) {
+        form.setValue("description", `Venda - ${product.name}`);
+        form.setValue("amount", String(product.price / 100));
       }
-    });
+    }
   }
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="lg" className="rounded-xl px-6 bg-primary hover:bg-primary/90 shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all duration-300">
-          <Plus className="mr-2 h-5 w-5" /> Nova Transação
+        <Button className="rounded-xl px-6" data-testid="button-new-transaction">
+          <Plus className="mr-2 h-5 w-5" /> Nova Transacao
         </Button>
       </DialogTrigger>
-      <DialogContent className="sm:max-w-[425px] rounded-2xl border-none shadow-2xl">
+      <DialogContent className="sm:max-w-[425px]">
         <DialogHeader className="pb-4">
-          <DialogTitle className="text-2xl font-display font-bold">Nova Transação</DialogTitle>
+          <DialogTitle className="text-2xl font-bold">Nova Transacao</DialogTitle>
           <DialogDescription>
-            Registre uma entrada ou saída financeira.
+            Registre uma entrada ou saida financeira.
           </DialogDescription>
         </DialogHeader>
 
@@ -76,20 +151,20 @@ export function CreateTransactionDialog() {
                     >
                       <div>
                         <RadioGroupItem value="income" id="income" className="peer sr-only" />
-                        <Label
+                        <TypeLabel
                           htmlFor="income"
                           icon={ArrowUpCircle}
                           title="Entrada"
-                          description="Vendas, serviços..."
+                          description="Vendas, servicos..."
                           colorClass="peer-data-[state=checked]:border-emerald-500 peer-data-[state=checked]:bg-emerald-50 peer-data-[state=checked]:text-emerald-700 text-emerald-600"
                         />
                       </div>
                       <div>
                         <RadioGroupItem value="expense" id="expense" className="peer sr-only" />
-                        <Label
+                        <TypeLabel
                           htmlFor="expense"
                           icon={ArrowDownCircle}
-                          title="Saída"
+                          title="Saida"
                           description="Custos, despesas..."
                           colorClass="peer-data-[state=checked]:border-rose-500 peer-data-[state=checked]:bg-rose-50 peer-data-[state=checked]:text-rose-700 text-rose-600"
                         />
@@ -101,14 +176,64 @@ export function CreateTransactionDialog() {
               )}
             />
 
+            {watchType === "income" && products.length > 0 && (
+              <FormField
+                control={form.control}
+                name="productId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Produto (opcional)</FormLabel>
+                    <Select value={field.value || "none"} onValueChange={onProductSelect}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-product">
+                          <SelectValue placeholder="Selecionar produto..." />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">Nenhum produto</SelectItem>
+                        {products.filter((p) => p.quantity > 0).map((p) => (
+                          <SelectItem key={p.id} value={String(p.id)} data-testid={`option-product-${p.id}`}>
+                            {p.name} ({p.quantity} un.) - {formatCurrency(p.price / 100)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {watchType === "income" && selectedProduct && (
+              <FormField
+                control={form.control}
+                name="productQty"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Quantidade vendida</FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        min="1"
+                        max={selectedProduct.quantity}
+                        {...field}
+                        data-testid="input-product-qty"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
             <FormField
               control={form.control}
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Descrição</FormLabel>
+                  <FormLabel>Descricao</FormLabel>
                   <FormControl>
-                    <Input placeholder="Ex: Venda de Consultoria" className="h-11 rounded-xl" {...field} />
+                    <Input placeholder="Ex: Venda de Consultoria" {...field} data-testid="input-transaction-description" />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -122,12 +247,13 @@ export function CreateTransactionDialog() {
                 <FormItem>
                   <FormLabel>Valor (R$)</FormLabel>
                   <FormControl>
-                    <Input 
-                      type="number" 
-                      step="0.01" 
-                      placeholder="0.00" 
-                      className="h-11 rounded-xl font-mono text-lg" 
-                      {...field} 
+                    <Input
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      className="font-mono text-lg"
+                      {...field}
+                      data-testid="input-transaction-amount"
                     />
                   </FormControl>
                   <FormMessage />
@@ -136,12 +262,13 @@ export function CreateTransactionDialog() {
             />
 
             <div className="flex justify-end pt-2">
-              <Button 
-                type="submit" 
-                disabled={isPending}
-                className="w-full h-11 rounded-xl text-base font-semibold bg-primary hover:bg-primary/90"
+              <Button
+                type="submit"
+                disabled={createMutation.isPending}
+                className="w-full"
+                data-testid="button-submit-transaction"
               >
-                {isPending ? "Salvando..." : "Confirmar Transação"}
+                {createMutation.isPending ? "Salvando..." : "Confirmar Transacao"}
               </Button>
             </div>
           </form>
@@ -151,13 +278,12 @@ export function CreateTransactionDialog() {
   );
 }
 
-// Helper component for radio cards
-function Label({ htmlFor, icon: Icon, title, description, colorClass }: any) {
+function TypeLabel({ htmlFor, icon: Icon, title, description, colorClass }: any) {
   return (
     <label
       htmlFor={htmlFor}
       className={cn(
-        "flex flex-col items-center justify-between rounded-xl border-2 border-muted bg-transparent p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary cursor-pointer transition-all duration-200 h-full text-center",
+        "flex flex-col items-center justify-between rounded-xl border-2 border-muted bg-transparent p-4 cursor-pointer transition-all duration-200 h-full text-center",
         colorClass
       )}
     >

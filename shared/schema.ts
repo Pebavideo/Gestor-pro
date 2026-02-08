@@ -29,14 +29,33 @@ export const employees = pgTable("employees", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const products = pgTable("products", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  quantity: integer("quantity").notNull().default(0),
+  price: integer("price").notNull(),
+  userId: varchar("user_id").notNull(),
+  active: integer("active").notNull().default(1),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const insertEmployeeSchema = createInsertSchema(employees).pick({
   name: true,
   position: true,
   salary: true,
 });
 
+export const insertProductSchema = createInsertSchema(products).pick({
+  name: true,
+  quantity: true,
+  price: true,
+});
+
 export type Employee = typeof employees.$inferSelect;
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
+
+export type Product = typeof products.$inferSelect;
+export type InsertProduct = z.infer<typeof insertProductSchema>;
 
 export const insertTransactionSchema = createInsertSchema(transactions).pick({
   description: true,

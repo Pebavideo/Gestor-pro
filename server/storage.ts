@@ -1,11 +1,12 @@
 import { db } from "./db";
 import { 
-  transactions, settings, users, employees,
+  transactions, settings, users, employees, products,
   type Transaction, type InsertTransaction, 
   type Settings, type InsertSettings,
-  type Employee, type InsertEmployee
+  type Employee, type InsertEmployee,
+  type Product, type InsertProduct
 } from "@shared/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, sql } from "drizzle-orm";
 import type { User } from "@shared/models/auth";
 
 export interface IStorage {
@@ -27,6 +28,12 @@ export interface IStorage {
   deleteEmployee(id: number, userId: string): Promise<boolean>;
   processPayroll(userId: string): Promise<Transaction[]>;
   processPayrollForEmployee(employeeId: number, userId: string): Promise<Transaction | null>;
+
+  getProducts(userId: string): Promise<Product[]>;
+  createProduct(product: InsertProduct, userId: string): Promise<Product>;
+  updateProduct(id: number, product: Partial<InsertProduct>, userId: string): Promise<Product | null>;
+  deleteProduct(id: number, userId: string): Promise<boolean>;
+  decrementProductStock(id: number, quantity: number, userId: string): Promise<Product | null>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -167,6 +174,51 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return tx;
+  }
+  async getProducts(userId: string): Promise<Product[]> {
+    return await db.select().from(products)
+      .where(and(eq(products.userId, userId), eq(products.active, 1)))
+      .orderBy(desc(products.createdAt));
+  }
+
+  async createProduct(product: InsertProduct, userId: string): Promise<Product> {
+    const [created] = await db
+      .insert(products)
+      .values({ ...product, userId })
+      .returning();
+    return created;
+  }
+
+  async updateProduct(id: number, product: Partial<InsertProduct>, userId: string): Promise<Product | null> {
+    const [existing] = await db.select().from(products)
+      .where(and(eq(products.id, id), eq(products.userId, userId), eq(products.active, 1)));
+    if (!existing) return null;
+    const [updated] = await db
+      .update(products)
+      .set(product)
+      .where(and(eq(products.id, id), eq(products.userId, userId)))
+      .returning();
+    return updated;
+  }
+
+  async deleteProduct(id: number, userId: string): Promise<boolean> {
+    const [existing] = await db.select().from(products)
+      .where(and(eq(products.id, id), eq(products.userId, userId)));
+    if (!existing) return false;
+    await db.update(products).set({ active: 0 }).where(eq(products.id, id));
+    return true;
+  }
+
+  async decrementProductStock(id: number, quantity: number, userId: string): Promise<Product | null> {
+    const [existing] = await db.select().from(products)
+      .where(and(eq(products.id, id), eq(products.userId, userId), eq(products.active, 1)));
+    if (!existing || existing.quantity < quantity) return null;
+    const [updated] = await db
+      .update(products)
+      .set({ quantity: sql`${products.quantity} - ${quantity}` })
+      .where(and(eq(products.id, id), eq(products.userId, userId)))
+      .returning();
+    return updated;
   }
 }
 

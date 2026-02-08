@@ -3,7 +3,7 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
-import { insertEmployeeSchema } from "@shared/schema";
+import { insertEmployeeSchema, insertProductSchema } from "@shared/schema";
 import { setupAuth, registerAuthRoutes, isAuthenticated, getUserId } from "./auth";
 
 async function requireAdmin(req: Request, res: Response, next: NextFunction) {
@@ -46,7 +46,24 @@ export async function registerRoutes(
   app.post(api.transactions.create.path, isAuthenticated, requireVerified, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const input = api.transactions.create.input.parse(req.body);
+      const { productId, productQty, ...txData } = req.body;
+      const input = api.transactions.create.input.parse(txData);
+
+      if (productId && input.type === "income") {
+        const pid = typeof productId === "number" ? productId : parseInt(productId);
+        const qty = typeof productQty === "number" ? productQty : parseInt(productQty) || 1;
+        if (isNaN(pid) || pid <= 0) {
+          return res.status(400).json({ message: "ID do produto invalido." });
+        }
+        if (isNaN(qty) || qty <= 0) {
+          return res.status(400).json({ message: "Quantidade deve ser maior que zero." });
+        }
+        const result = await storage.decrementProductStock(pid, qty, userId);
+        if (!result) {
+          return res.status(400).json({ message: "Estoque insuficiente ou produto nao encontrado." });
+        }
+      }
+
       const transaction = await storage.createTransaction(input, userId);
       res.status(201).json(transaction);
     } catch (err) {
@@ -218,6 +235,53 @@ export async function registerRoutes(
     }
     const txs = await storage.processPayroll(userId);
     res.status(201).json({ message: `Folha de pagamento processada. ${txs.length} lancamento(s) criado(s).`, transactions: txs });
+  });
+
+  // ====== Product Routes ======
+  app.get("/api/products", isAuthenticated, requireVerified, async (req, res) => {
+    const userId = getUserId(req);
+    const prods = await storage.getProducts(userId);
+    res.json(prods);
+  });
+
+  app.post("/api/products", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const input = insertProductSchema.parse(req.body);
+      const product = await storage.createProduct(input, userId);
+      res.status(201).json(product);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
+      }
+      throw err;
+    }
+  });
+
+  app.patch("/api/products/:id", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
+      const userId = getUserId(req);
+      const input = insertProductSchema.partial().parse(req.body);
+      const product = await storage.updateProduct(id, input, userId);
+      if (!product) return res.status(404).json({ message: "Produto nao encontrado" });
+      res.json(product);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
+      }
+      throw err;
+    }
+  });
+
+  app.delete("/api/products/:id", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id as string);
+    if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
+    const userId = getUserId(req);
+    const deleted = await storage.deleteProduct(id, userId);
+    if (!deleted) return res.status(404).json({ message: "Produto nao encontrado" });
+    res.status(204).send();
   });
 
   app.patch("/api/user/make-admin", isAuthenticated, requireVerified, async (req, res) => {

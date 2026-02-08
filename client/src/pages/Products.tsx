@@ -1,0 +1,336 @@
+import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/use-auth";
+import { formatCurrency } from "@/hooks/use-transactions";
+import { useToast } from "@/hooks/use-toast";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Plus, Package, Pencil, Trash2, PackageOpen, ShoppingBag } from "lucide-react";
+import type { Product } from "@shared/schema";
+
+export default function Products() {
+  const { isAdmin } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: products = [], isLoading } = useQuery<Product[]>({
+    queryKey: ["/api/products"],
+    queryFn: async () => {
+      const res = await fetch("/api/products", { credentials: "include" });
+      if (!res.ok) throw new Error("Erro ao carregar produtos");
+      return res.json();
+    },
+  });
+
+  const [showCreate, setShowCreate] = useState(false);
+  const [editProduct, setEditProduct] = useState<Product | null>(null);
+
+  const [formName, setFormName] = useState("");
+  const [formQuantity, setFormQuantity] = useState("");
+  const [formPrice, setFormPrice] = useState("");
+
+  const createMutation = useMutation({
+    mutationFn: async (data: { name: string; quantity: number; price: number }) => {
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Erro ao criar produto");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      toast({ title: "Produto cadastrado", description: "O produto foi adicionado com sucesso." });
+      resetForm();
+      setShowCreate(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number; data: Partial<{ name: string; quantity: number; price: number }> }) => {
+      const res = await fetch(`/api/products/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Erro ao atualizar produto");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      toast({ title: "Produto atualizado", description: "As alteracoes foram salvas." });
+      setEditProduct(null);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/products/${id}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok && res.status !== 204) throw new Error("Erro ao remover produto");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      toast({ title: "Produto removido", description: "O produto foi desativado." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const resetForm = () => {
+    setFormName("");
+    setFormQuantity("");
+    setFormPrice("");
+  };
+
+  const openCreate = () => {
+    resetForm();
+    setShowCreate(true);
+  };
+
+  const openEdit = (p: Product) => {
+    setEditProduct(p);
+    setFormName(p.name);
+    setFormQuantity(String(p.quantity));
+    setFormPrice(String(p.price / 100));
+  };
+
+  const submitCreate = () => {
+    const price = Math.round(parseFloat(formPrice) * 100);
+    const quantity = parseInt(formQuantity) || 0;
+    if (!formName.trim() || isNaN(price) || price <= 0) return;
+    createMutation.mutate({ name: formName.trim(), quantity, price });
+  };
+
+  const submitEdit = () => {
+    if (!editProduct) return;
+    const price = Math.round(parseFloat(formPrice) * 100);
+    const quantity = parseInt(formQuantity) || 0;
+    if (!formName.trim() || isNaN(price) || price <= 0) return;
+    updateMutation.mutate({ id: editProduct.id, data: { name: formName.trim(), quantity, price } });
+  };
+
+  const totalProducts = products.length;
+  const totalStock = products.reduce((sum, p) => sum + p.quantity, 0);
+  const totalValue = products.reduce((sum, p) => sum + (p.quantity * p.price), 0);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight" data-testid="text-products-title">Gestao de Produtos</h2>
+          <p className="text-muted-foreground mt-1">Cadastre e gerencie seu estoque de produtos.</p>
+        </div>
+        {isAdmin && (
+          <Button onClick={openCreate} className="rounded-xl px-6" data-testid="button-add-product">
+            <Plus className="mr-2 h-5 w-5" /> Novo Produto
+          </Button>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-blue-500/10">
+              <Package className="w-5 h-5 text-blue-500" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Produtos Cadastrados</p>
+              <p className="text-2xl font-bold" data-testid="text-product-count">{totalProducts}</p>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-emerald-500/10">
+              <ShoppingBag className="w-5 h-5 text-emerald-500" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Total em Estoque</p>
+              <p className="text-2xl font-bold" data-testid="text-total-stock">{totalStock} un.</p>
+            </div>
+          </div>
+        </Card>
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-amber-500/10">
+              <PackageOpen className="w-5 h-5 text-amber-500" />
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Valor Total do Estoque</p>
+              <p className="text-2xl font-bold" data-testid="text-total-value">{formatCurrency(totalValue / 100)}</p>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-4 p-8">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-16 w-full bg-muted/50 animate-pulse rounded-xl" />
+          ))}
+        </div>
+      ) : products.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
+          <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
+            <Package className="w-8 h-8 opacity-50" />
+          </div>
+          <h3 className="text-lg font-semibold text-foreground">Nenhum produto cadastrado</h3>
+          <p className="max-w-xs mx-auto mt-2">Adicione produtos para gerenciar seu estoque.</p>
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-border/50 bg-card overflow-hidden shadow-sm">
+          <Table>
+            <TableHeader className="bg-muted/30">
+              <TableRow className="hover:bg-transparent border-border/50">
+                <TableHead className="pl-6">Nome</TableHead>
+                <TableHead className="text-right">Qtd. Estoque</TableHead>
+                <TableHead className="text-right">Preco Sugerido</TableHead>
+                {isAdmin && <TableHead className="text-right pr-6">Acoes</TableHead>}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {products.map((p) => (
+                <TableRow key={p.id} className="hover:bg-muted/30 border-border/50 transition-colors" data-testid={`row-product-${p.id}`}>
+                  <TableCell className="pl-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                        <Package className="w-4 h-4" />
+                      </div>
+                      <span className="font-medium" data-testid={`text-product-name-${p.id}`}>{p.name}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Badge
+                      variant="secondary"
+                      className={p.quantity <= 0 ? "bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400" : ""}
+                      data-testid={`text-product-qty-${p.id}`}
+                    >
+                      {p.quantity} un.
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right font-mono font-medium" data-testid={`text-product-price-${p.id}`}>
+                    {formatCurrency(p.price / 100)}
+                  </TableCell>
+                  {isAdmin && (
+                    <TableCell className="text-right pr-6">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => openEdit(p)} data-testid={`button-edit-product-${p.id}`}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="ghost" size="icon" data-testid={`button-delete-product-${p.id}`}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Remover produto?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                O produto <span className="font-semibold">{p.name}</span> sera desativado e removido da lista.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => deleteMutation.mutate(p.id)}
+                                className="bg-destructive"
+                                data-testid={`button-confirm-delete-product-${p.id}`}
+                              >
+                                Remover
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Novo Produto</DialogTitle>
+            <DialogDescription>Cadastre um novo produto no estoque.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="create-product-name">Nome</Label>
+              <Input id="create-product-name" value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="Nome do produto" data-testid="input-product-name" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-product-qty">Quantidade em Estoque</Label>
+              <Input id="create-product-qty" type="number" min="0" value={formQuantity} onChange={(e) => setFormQuantity(e.target.value)} placeholder="0" data-testid="input-product-quantity" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-product-price">Preco Sugerido (R$)</Label>
+              <Input id="create-product-price" type="number" step="0.01" min="0.01" value={formPrice} onChange={(e) => setFormPrice(e.target.value)} placeholder="0.00" data-testid="input-product-price" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
+            <Button onClick={submitCreate} disabled={createMutation.isPending || !formName.trim() || !formPrice} data-testid="button-submit-product">
+              {createMutation.isPending ? "Salvando..." : "Cadastrar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!editProduct} onOpenChange={(open) => { if (!open) setEditProduct(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar Produto</DialogTitle>
+            <DialogDescription>Altere os dados do produto.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="edit-product-name">Nome</Label>
+              <Input id="edit-product-name" value={formName} onChange={(e) => setFormName(e.target.value)} data-testid="input-edit-product-name" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-product-qty">Quantidade em Estoque</Label>
+              <Input id="edit-product-qty" type="number" min="0" value={formQuantity} onChange={(e) => setFormQuantity(e.target.value)} data-testid="input-edit-product-quantity" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-product-price">Preco Sugerido (R$)</Label>
+              <Input id="edit-product-price" type="number" step="0.01" min="0.01" value={formPrice} onChange={(e) => setFormPrice(e.target.value)} data-testid="input-edit-product-price" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditProduct(null)}>Cancelar</Button>
+            <Button onClick={submitEdit} disabled={updateMutation.isPending || !formName.trim() || !formPrice} data-testid="button-submit-edit-product">
+              {updateMutation.isPending ? "Salvando..." : "Salvar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

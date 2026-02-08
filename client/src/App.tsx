@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
 import Dashboard from "@/pages/Dashboard";
 import TeamManagement from "@/pages/TeamManagement";
+import Products from "@/pages/Products";
 import AuthPage from "@/pages/AuthPage";
 import NotFound from "@/pages/not-found";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -25,7 +26,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import { Layers, LayoutDashboard, Users, LogOut } from "lucide-react";
+import { Layers, LayoutDashboard, Users, Package, LogOut } from "lucide-react";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { useEffect } from "react";
 
@@ -38,8 +39,9 @@ function AppSidebar() {
     : "U";
 
   const navItems = [
-    { path: "/", label: "Painel Financeiro", icon: LayoutDashboard },
-    { path: "/equipe", label: "Gestao de Equipe", icon: Users },
+    { path: "/", label: "Painel Financeiro", icon: LayoutDashboard, testId: "dashboard" },
+    { path: "/produtos", label: "Produtos", icon: Package, testId: "products" },
+    { path: "/equipe", label: "Gestao de Equipe", icon: Users, testId: "team" },
   ];
 
   return (
@@ -66,7 +68,7 @@ function AppSidebar() {
                 return (
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton asChild isActive={isActive}>
-                      <Link href={item.path} data-testid={`nav-${item.path === "/" ? "dashboard" : "team"}`}>
+                      <Link href={item.path} data-testid={`nav-${item.testId}`}>
                         <item.icon />
                         <span>{item.label}</span>
                       </Link>
@@ -136,6 +138,7 @@ function AppLayout() {
             <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
               <Switch>
                 <Route path="/" component={Dashboard} />
+                <Route path="/produtos" component={Products} />
                 <Route path="/equipe" component={TeamManagement} />
                 <Route component={NotFound} />
               </Switch>
