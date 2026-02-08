@@ -79,11 +79,15 @@ export function registerAuthRoutes(app: Express) {
 
       (req.session as any).userId = user.id;
 
-      res.status(201).json({
+      const response: any = {
         message: "Cadastro realizado. Verifique seu e-mail.",
         needsVerification: true,
         user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, emailVerified: false },
-      });
+      };
+      if (process.env.NODE_ENV !== "production") {
+        response.verificationCode = verificationCode;
+      }
+      res.status(201).json(response);
     } catch (error) {
       console.error("Erro no registro:", error);
       res.status(500).json({ message: "Erro interno do servidor." });
@@ -164,7 +168,11 @@ export function registerAuthRoutes(app: Express) {
         .set({ verificationCode, verificationCodeExpiresAt, updatedAt: new Date() })
         .where(eq(users.id, userId));
 
-      res.json({ message: "Novo codigo enviado." });
+      const response: any = { message: "Novo codigo enviado." };
+      if (process.env.NODE_ENV !== "production") {
+        response.verificationCode = verificationCode;
+      }
+      res.json(response);
     } catch (error) {
       console.error("Erro ao reenviar codigo:", error);
       res.status(500).json({ message: "Erro interno do servidor." });
@@ -206,11 +214,15 @@ export function registerAuthRoutes(app: Express) {
           .set({ verificationCode, verificationCodeExpiresAt, updatedAt: new Date() })
           .where(eq(users.id, user.id));
 
-        return res.status(200).json({
+        const loginResponse: any = {
           message: "E-mail nao verificado. Verifique seu e-mail.",
           needsVerification: true,
           user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, emailVerified: false },
-        });
+        };
+        if (process.env.NODE_ENV !== "production") {
+          loginResponse.verificationCode = verificationCode;
+        }
+        return res.status(200).json(loginResponse);
       }
 
       res.json({

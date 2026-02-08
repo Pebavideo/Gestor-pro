@@ -69,7 +69,10 @@ export default function AuthPage() {
       if (data.needsVerification) {
         setUserEmail(data.user.email);
         setMode("verify");
-        toast({ title: "Verificacao necessaria", description: "Insira o codigo de verificacao enviado." });
+        const desc = data.verificationCode
+          ? `Seu codigo de verificacao: ${data.verificationCode}`
+          : "Insira o codigo de verificacao enviado.";
+        toast({ title: "Verificacao necessaria", description: desc });
       } else {
         queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
         toast({ title: "Bem-vindo!", description: "Login realizado com sucesso." });
@@ -95,7 +98,10 @@ export default function AuthPage() {
     onSuccess: (data) => {
       setUserEmail(data.user.email);
       setMode("verify");
-      toast({ title: "Cadastro realizado!", description: "Insira o codigo de verificacao para ativar sua conta." });
+      const desc = data.verificationCode
+        ? `Seu codigo de verificacao: ${data.verificationCode}`
+        : "Insira o codigo de verificacao para ativar sua conta.";
+      toast({ title: "Cadastro realizado!", description: desc });
     },
     onError: (error: Error) => {
       toast({ title: "Erro no cadastro", description: error.message, variant: "destructive" });
@@ -133,8 +139,11 @@ export default function AuthPage() {
       if (!res.ok) throw new Error(json.message);
       return json;
     },
-    onSuccess: () => {
-      toast({ title: "Codigo reenviado", description: "Um novo codigo de verificacao foi gerado." });
+    onSuccess: (data) => {
+      const desc = data.verificationCode
+        ? `Novo codigo: ${data.verificationCode}`
+        : "Um novo codigo de verificacao foi gerado.";
+      toast({ title: "Codigo reenviado", description: desc });
     },
     onError: (error: Error) => {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
