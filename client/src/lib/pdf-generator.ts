@@ -1,0 +1,318 @@
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+
+const formatCurrencyPDF = (value: number) =>
+  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+
+interface FinancialSummary {
+  totalIncome: number;
+  totalExpenses: number;
+  taxAmount: number;
+  netProfit: number;
+  currentTaxRate: number;
+}
+
+interface TransactionData {
+  description: string;
+  date: string | Date;
+  type: string;
+  amount: number;
+}
+
+interface EmployeeData {
+  name: string;
+  position: string;
+  salary: number;
+}
+
+export function generateDashboardPDF(
+  summary: FinancialSummary,
+  transactions: TransactionData[],
+  filterLabel: string
+) {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const now = new Date();
+
+  doc.setFontSize(20);
+  doc.setFont("helvetica", "bold");
+  doc.text("Gestor de Empresas Pro", 14, 20);
+
+  doc.setFontSize(12);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100);
+  doc.text("Relatorio Financeiro", 14, 28);
+
+  doc.setFontSize(9);
+  doc.text(`Periodo: ${filterLabel}`, 14, 35);
+  doc.text(`Gerado em: ${format(now, "dd/MM/yyyy HH:mm", { locale: ptBR })}`, 14, 41);
+
+  doc.setDrawColor(200);
+  doc.line(14, 45, pageWidth - 14, 45);
+
+  doc.setFontSize(13);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0);
+  doc.text("Resumo Financeiro", 14, 54);
+
+  const summaryData = [
+    ["Faturamento Bruto", formatCurrencyPDF(summary.totalIncome / 100)],
+    ["Despesas Totais", formatCurrencyPDF(summary.totalExpenses / 100)],
+    [`Impostos (${summary.currentTaxRate}%)`, formatCurrencyPDF(summary.taxAmount / 100)],
+    ["Lucro Liquido", formatCurrencyPDF(summary.netProfit / 100)],
+  ];
+
+  autoTable(doc, {
+    startY: 58,
+    head: [["Indicador", "Valor"]],
+    body: summaryData,
+    theme: "grid",
+    headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: "bold", fontSize: 10 },
+    bodyStyles: { fontSize: 10 },
+    columnStyles: { 1: { halign: "right", fontStyle: "bold" } },
+    margin: { left: 14, right: 14 },
+  });
+
+  const afterSummaryY = (doc as any).lastAutoTable.finalY + 12;
+
+  doc.setFontSize(13);
+  doc.setFont("helvetica", "bold");
+  doc.text("Transacoes", 14, afterSummaryY);
+
+  const txRows = transactions.map((tx) => [
+    tx.description,
+    format(new Date(tx.date), "dd/MM/yyyy HH:mm", { locale: ptBR }),
+    tx.type === "income" ? "Entrada" : "Saida",
+    `${tx.type === "income" ? "+" : "-"}${formatCurrencyPDF(tx.amount / 100)}`,
+  ]);
+
+  autoTable(doc, {
+    startY: afterSummaryY + 4,
+    head: [["Descricao", "Data", "Tipo", "Valor"]],
+    body: txRows,
+    theme: "striped",
+    headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: "bold", fontSize: 9 },
+    bodyStyles: { fontSize: 9 },
+    columnStyles: {
+      0: { cellWidth: 65 },
+      3: { halign: "right", fontStyle: "bold" },
+    },
+    margin: { left: 14, right: 14 },
+    didParseCell: (data: any) => {
+      if (data.section === "body" && data.column.index === 2) {
+        if (data.cell.raw === "Entrada") {
+          data.cell.styles.textColor = [39, 174, 96];
+        } else {
+          data.cell.styles.textColor = [231, 76, 60];
+        }
+      }
+      if (data.section === "body" && data.column.index === 3) {
+        const raw = String(data.cell.raw);
+        if (raw.startsWith("+")) {
+          data.cell.styles.textColor = [39, 174, 96];
+        } else {
+          data.cell.styles.textColor = [231, 76, 60];
+        }
+      }
+    },
+  });
+
+  const pageCount = doc.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text(
+      `Pagina ${i} de ${pageCount} - Gestor de Empresas Pro`,
+      pageWidth / 2,
+      doc.internal.pageSize.getHeight() - 10,
+      { align: "center" }
+    );
+  }
+
+  doc.save(`relatorio-financeiro-${format(now, "yyyy-MM-dd")}.pdf`);
+}
+
+export function generateTeamPDF(employees: EmployeeData[], totalPayroll: number) {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const now = new Date();
+
+  doc.setFontSize(20);
+  doc.setFont("helvetica", "bold");
+  doc.text("Gestor de Empresas Pro", 14, 20);
+
+  doc.setFontSize(12);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100);
+  doc.text("Relatorio de Equipe", 14, 28);
+
+  doc.setFontSize(9);
+  doc.text(`Gerado em: ${format(now, "dd/MM/yyyy HH:mm", { locale: ptBR })}`, 14, 35);
+
+  doc.setDrawColor(200);
+  doc.line(14, 39, pageWidth - 14, 39);
+
+  doc.setFontSize(13);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0);
+  doc.text("Resumo da Equipe", 14, 48);
+
+  const avgSalary = employees.length > 0 ? totalPayroll / employees.length / 100 : 0;
+  const summaryData = [
+    ["Total de Funcionarios", String(employees.length)],
+    ["Folha Mensal", formatCurrencyPDF(totalPayroll / 100)],
+    ["Salario Medio", formatCurrencyPDF(avgSalary)],
+  ];
+
+  autoTable(doc, {
+    startY: 52,
+    head: [["Indicador", "Valor"]],
+    body: summaryData,
+    theme: "grid",
+    headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: "bold", fontSize: 10 },
+    bodyStyles: { fontSize: 10 },
+    columnStyles: { 1: { halign: "right", fontStyle: "bold" } },
+    margin: { left: 14, right: 14 },
+  });
+
+  const afterSummaryY = (doc as any).lastAutoTable.finalY + 12;
+
+  doc.setFontSize(13);
+  doc.setFont("helvetica", "bold");
+  doc.text("Lista de Funcionarios", 14, afterSummaryY);
+
+  const empRows = employees.map((emp, idx) => [
+    String(idx + 1),
+    emp.name,
+    emp.position,
+    formatCurrencyPDF(emp.salary / 100),
+  ]);
+
+  autoTable(doc, {
+    startY: afterSummaryY + 4,
+    head: [["#", "Nome", "Cargo", "Salario Mensal"]],
+    body: empRows,
+    theme: "striped",
+    headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: "bold", fontSize: 9 },
+    bodyStyles: { fontSize: 9 },
+    columnStyles: {
+      0: { cellWidth: 12, halign: "center" },
+      3: { halign: "right", fontStyle: "bold" },
+    },
+    margin: { left: 14, right: 14 },
+  });
+
+  const pageCount = doc.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text(
+      `Pagina ${i} de ${pageCount} - Gestor de Empresas Pro`,
+      pageWidth / 2,
+      doc.internal.pageSize.getHeight() - 10,
+      { align: "center" }
+    );
+  }
+
+  doc.save(`relatorio-equipe-${format(now, "yyyy-MM-dd")}.pdf`);
+}
+
+export function generateWhatsAppMessage(
+  type: "transaction" | "payment",
+  data: {
+    description: string;
+    amount: number;
+    date?: string | Date;
+    employeeName?: string;
+    txType?: string;
+  }
+): string {
+  const amountFormatted = formatCurrencyPDF(data.amount / 100);
+  const dateFormatted = data.date
+    ? format(new Date(data.date), "dd/MM/yyyy HH:mm", { locale: ptBR })
+    : format(new Date(), "dd/MM/yyyy HH:mm", { locale: ptBR });
+
+  if (type === "transaction") {
+    const label = data.txType === "income" ? "Receita" : "Despesa";
+    return encodeURIComponent(
+      `*Gestor de Empresas Pro*\n` +
+      `--------------------\n` +
+      `*Comprovante de ${label}*\n\n` +
+      `Descricao: ${data.description}\n` +
+      `Valor: ${amountFormatted}\n` +
+      `Tipo: ${label}\n` +
+      `Data: ${dateFormatted}\n` +
+      `--------------------\n` +
+      `_Documento gerado automaticamente_`
+    );
+  }
+
+  return encodeURIComponent(
+    `*Gestor de Empresas Pro*\n` +
+    `--------------------\n` +
+    `*Comprovante de Pagamento*\n\n` +
+    `Funcionario: ${data.employeeName || data.description}\n` +
+    `Valor: ${amountFormatted}\n` +
+    `Data: ${dateFormatted}\n` +
+    `--------------------\n` +
+    `_Documento gerado automaticamente_`
+  );
+}
+
+export function openWhatsApp(message: string) {
+  window.open(`https://wa.me/?text=${message}`, "_blank");
+}
+
+export function printTable(title: string, elementId: string) {
+  const element = document.getElementById(elementId);
+  if (!element) return;
+
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) return;
+
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>${title} - Gestor de Empresas Pro</title>
+      <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, Helvetica, sans-serif; padding: 20px; color: #333; }
+        .print-header { text-align: center; margin-bottom: 24px; border-bottom: 2px solid #2980b9; padding-bottom: 16px; }
+        .print-header h1 { font-size: 22px; color: #2980b9; margin-bottom: 4px; }
+        .print-header h2 { font-size: 16px; color: #555; font-weight: normal; }
+        .print-header .date { font-size: 11px; color: #888; margin-top: 6px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+        thead th { background: #2980b9; color: white; text-align: left; padding: 10px 12px; font-size: 12px; }
+        thead th:last-child { text-align: right; }
+        tbody td { padding: 8px 12px; border-bottom: 1px solid #eee; font-size: 12px; }
+        tbody td:last-child { text-align: right; }
+        tbody tr:nth-child(even) { background: #f8f9fa; }
+        .income { color: #27ae60; font-weight: 600; }
+        .expense { color: #e74c3c; font-weight: 600; }
+        .footer { text-align: center; margin-top: 24px; font-size: 10px; color: #999; border-top: 1px solid #ddd; padding-top: 12px; }
+        @media print { body { padding: 10px; } }
+      </style>
+    </head>
+    <body>
+      <div class="print-header">
+        <h1>Gestor de Empresas Pro</h1>
+        <h2>${title}</h2>
+        <p class="date">Impresso em: ${format(new Date(), "dd/MM/yyyy HH:mm", { locale: ptBR })}</p>
+      </div>
+      ${element.innerHTML}
+      <div class="footer">Gestor de Empresas Pro - Documento para impressao</div>
+    </body>
+    </html>
+  `);
+
+  printWindow.document.close();
+  printWindow.focus();
+  setTimeout(() => {
+    printWindow.print();
+  }, 300);
+}

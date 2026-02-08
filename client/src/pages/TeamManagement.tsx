@@ -14,7 +14,8 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Users, Plus, Pencil, Trash2, Inbox, Banknote, DollarSign } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, Inbox, Banknote, DollarSign, FileDown, Printer, Share2 } from "lucide-react";
+import { generateTeamPDF, generateWhatsAppMessage, openWhatsApp, printTable } from "@/lib/pdf-generator";
 import { CurrencyInput, parseBRL, centsToFormatted } from "@/components/CurrencyInput";
 import type { Employee } from "@shared/schema";
 
@@ -189,6 +190,26 @@ export default function TeamManagement() {
           <p className="text-muted-foreground mt-1">Gerencie seus funcionarios e folha de pagamento.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => employees && generateTeamPDF(employees, totalPayroll)}
+            disabled={!employees?.length}
+            data-testid="button-export-team-pdf"
+            title="Exportar PDF"
+          >
+            <FileDown className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => printTable("Relatorio de Equipe", "printable-employees")}
+            disabled={!employees?.length}
+            data-testid="button-print-team"
+            title="Imprimir"
+          >
+            <Printer className="h-4 w-4" />
+          </Button>
           {isAdmin && (
             <>
               <AlertDialog>
@@ -384,6 +405,22 @@ export default function TeamManagement() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            onClick={() => {
+                              const msg = generateWhatsAppMessage("payment", {
+                                description: `Pagamento - ${emp.name}`,
+                                amount: emp.salary,
+                                employeeName: emp.name,
+                              });
+                              openWhatsApp(msg);
+                            }}
+                            data-testid={`button-share-employee-${emp.id}`}
+                            title="Compartilhar via WhatsApp"
+                          >
+                            <Share2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             onClick={() => openEdit(emp)}
                             data-testid={`button-edit-employee-${emp.id}`}
                           >
@@ -483,6 +520,22 @@ export default function TeamManagement() {
                   </p>
                   {isAdmin && (
                     <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          const msg = generateWhatsAppMessage("payment", {
+                            description: `Pagamento - ${emp.name}`,
+                            amount: emp.salary,
+                            employeeName: emp.name,
+                          });
+                          openWhatsApp(msg);
+                        }}
+                        data-testid={`card-button-share-employee-${emp.id}`}
+                        title="Compartilhar via WhatsApp"
+                      >
+                        <Share2 className="h-4 w-4" />
+                      </Button>
                       <Button
                         variant="ghost"
                         size="icon"
@@ -618,6 +671,29 @@ export default function TeamManagement() {
           </Form>
         </DialogContent>
       </Dialog>
+
+      <div id="printable-employees" className="hidden">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Nome</th>
+              <th>Cargo</th>
+              <th>Salario Mensal</th>
+            </tr>
+          </thead>
+          <tbody>
+            {employees?.map((emp, idx) => (
+              <tr key={emp.id}>
+                <td>{idx + 1}</td>
+                <td>{emp.name}</td>
+                <td>{emp.position}</td>
+                <td>{formatCurrency(emp.salary / 100)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

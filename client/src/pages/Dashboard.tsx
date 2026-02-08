@@ -1,12 +1,16 @@
 import { useState, useMemo } from "react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { useTransactions, formatCurrency } from "@/hooks/use-transactions";
 import { useSettings } from "@/hooks/use-transactions";
 import { useAuth } from "@/hooks/use-auth";
 import { StatsCard } from "@/components/StatsCard";
 import { CreateTransactionDialog } from "@/components/CreateTransactionDialog";
 import { TransactionTable } from "@/components/TransactionTable";
-import { TrendingUp, TrendingDown, Landmark, Wallet, CalendarDays } from "lucide-react";
+import { TrendingUp, TrendingDown, Landmark, Wallet, CalendarDays, FileDown, Printer } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { generateDashboardPDF, printTable } from "@/lib/pdf-generator";
 
 const MONTH_NAMES = [
   "Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho",
@@ -85,6 +89,25 @@ export default function Dashboard() {
       : `${monthFilter.year}`
     : "Todos os periodos";
 
+  const filteredTransactions = useMemo(() => {
+    if (!transactions) return [];
+    if (!monthFilter) return transactions;
+    return transactions.filter((tx) => {
+      const d = new Date(tx.date);
+      if (d.getFullYear() !== monthFilter.year) return false;
+      if (monthFilter.month !== null && d.getMonth() !== monthFilter.month) return false;
+      return true;
+    });
+  }, [transactions, monthFilter]);
+
+  function handleExportPDF() {
+    generateDashboardPDF(summary, filteredTransactions, filterLabel);
+  }
+
+  function handlePrint() {
+    printTable(`Relatorio Financeiro - ${filterLabel}`, "printable-transactions");
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -125,6 +148,26 @@ export default function Dashboard() {
             )}
           </div>
           <CreateTransactionDialog />
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handleExportPDF}
+            disabled={isLoading || !transactions?.length}
+            data-testid="button-export-pdf"
+            title="Exportar PDF"
+          >
+            <FileDown className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={handlePrint}
+            disabled={isLoading || !transactions?.length}
+            data-testid="button-print-dashboard"
+            title="Imprimir"
+          >
+            <Printer className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
@@ -173,6 +216,33 @@ export default function Dashboard() {
           <p className="text-muted-foreground text-sm mt-1">Gerencie suas entradas e saidas.</p>
         </div>
         <TransactionTable monthFilter={monthFilter} />
+      </div>
+
+      <div id="printable-transactions" className="hidden">
+        <table>
+          <thead>
+            <tr>
+              <th>Descricao</th>
+              <th>Data</th>
+              <th>Tipo</th>
+              <th>Valor</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredTransactions.map((tx) => (
+              <tr key={tx.id}>
+                <td>{tx.description}</td>
+                <td>{format(new Date(tx.date), "dd/MM/yyyy HH:mm", { locale: ptBR })}</td>
+                <td className={tx.type === "income" ? "income" : "expense"}>
+                  {tx.type === "income" ? "Entrada" : "Saida"}
+                </td>
+                <td className={tx.type === "income" ? "income" : "expense"}>
+                  {tx.type === "income" ? "+" : "-"}{formatCurrency(tx.amount / 100)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

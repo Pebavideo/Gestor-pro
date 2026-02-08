@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CurrencyInput, parseBRL, centsToFormatted } from "@/components/CurrencyInput";
-import { Trash2, ArrowUpRight, ArrowDownRight, Inbox, Pencil } from "lucide-react";
+import { Trash2, ArrowUpRight, ArrowDownRight, Inbox, Pencil, Share2 } from "lucide-react";
+import { generateWhatsAppMessage, openWhatsApp } from "@/lib/pdf-generator";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Card } from "@/components/ui/card";
@@ -88,7 +89,7 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
               <TableHead>Data</TableHead>
               <TableHead>Tipo</TableHead>
               <TableHead className="text-right">Valor</TableHead>
-              {isAdmin && <TableHead className="w-[100px] text-right pr-6">Acoes</TableHead>}
+              <TableHead className="w-[120px] text-right pr-6">Acoes</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -122,50 +123,69 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
                 <TableCell className={`text-right font-mono font-medium ${tx.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
                   {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount / 100)}
                 </TableCell>
-                {isAdmin && (
-                  <TableCell className="text-right pr-6">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openEdit(tx)}
-                        data-testid={`button-edit-transaction-${tx.id}`}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            data-testid={`button-delete-${tx.id}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent className="rounded-2xl">
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Excluir transacao?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Esta acao nao pode ser desfeita. O registro sera removido permanentemente dos calculos.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => deleteTx(tx.id)}
-                              disabled={isDeleting}
-                              className="bg-destructive rounded-xl"
-                              data-testid={`button-confirm-delete-${tx.id}`}
+                <TableCell className="text-right pr-6">
+                  <div className="flex items-center justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        const msg = generateWhatsAppMessage("transaction", {
+                          description: tx.description,
+                          amount: tx.amount,
+                          date: tx.date,
+                          txType: tx.type,
+                        });
+                        openWhatsApp(msg);
+                      }}
+                      data-testid={`button-share-transaction-${tx.id}`}
+                      title="Compartilhar via WhatsApp"
+                    >
+                      <Share2 className="h-4 w-4" />
+                    </Button>
+                    {isAdmin && (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEdit(tx)}
+                          data-testid={`button-edit-transaction-${tx.id}`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              data-testid={`button-delete-${tx.id}`}
                             >
-                              Excluir
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  </TableCell>
-                )}
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent className="rounded-2xl">
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Excluir transacao?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Esta acao nao pode ser desfeita. O registro sera removido permanentemente dos calculos.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => deleteTx(tx.id)}
+                                disabled={isDeleting}
+                                className="bg-destructive rounded-xl"
+                                data-testid={`button-confirm-delete-${tx.id}`}
+                              >
+                                Excluir
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </>
+                    )}
+                  </div>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -201,48 +221,67 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
                   <span className={`font-mono font-medium text-base ${tx.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
                     {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount / 100)}
                   </span>
-                  {isAdmin && (
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => openEdit(tx)}
-                        data-testid={`card-button-edit-transaction-${tx.id}`}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            data-testid={`card-button-delete-${tx.id}`}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent className="rounded-2xl">
-                          <AlertDialogHeader>
-                            <AlertDialogTitle>Excluir transacao?</AlertDialogTitle>
-                            <AlertDialogDescription>
-                              Esta acao nao pode ser desfeita. O registro sera removido permanentemente dos calculos.
-                            </AlertDialogDescription>
-                          </AlertDialogHeader>
-                          <AlertDialogFooter>
-                            <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
-                            <AlertDialogAction
-                              onClick={() => deleteTx(tx.id)}
-                              disabled={isDeleting}
-                              className="bg-destructive rounded-xl"
-                              data-testid={`card-button-confirm-delete-${tx.id}`}
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => {
+                        const msg = generateWhatsAppMessage("transaction", {
+                          description: tx.description,
+                          amount: tx.amount,
+                          date: tx.date,
+                          txType: tx.type,
+                        });
+                        openWhatsApp(msg);
+                      }}
+                      data-testid={`card-button-share-transaction-${tx.id}`}
+                      title="Compartilhar via WhatsApp"
+                    >
+                      <Share2 className="h-4 w-4" />
+                    </Button>
+                    {isAdmin && (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEdit(tx)}
+                          data-testid={`card-button-edit-transaction-${tx.id}`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              data-testid={`card-button-delete-${tx.id}`}
                             >
-                              Excluir
-                            </AlertDialogAction>
-                          </AlertDialogFooter>
-                        </AlertDialogContent>
-                      </AlertDialog>
-                    </div>
-                  )}
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent className="rounded-2xl">
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Excluir transacao?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Esta acao nao pode ser desfeita. O registro sera removido permanentemente dos calculos.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
+                              <AlertDialogAction
+                                onClick={() => deleteTx(tx.id)}
+                                disabled={isDeleting}
+                                className="bg-destructive rounded-xl"
+                                data-testid={`card-button-confirm-delete-${tx.id}`}
+                              >
+                                Excluir
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
