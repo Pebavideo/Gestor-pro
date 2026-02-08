@@ -324,6 +324,143 @@ export function openEmailTeam(employees: EmployeeData[], totalPayroll: number) {
   window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, "_self");
 }
 
+interface DRELineData {
+  label: string;
+  value: number;
+  level: number;
+  isBold?: boolean;
+  isTotal?: boolean;
+  color?: string;
+}
+
+interface DREComputedData {
+  receitaBruta: number;
+  impostos: number;
+  receitaLiquida: number;
+  cpv: number;
+  lucroBruto: number;
+  despesasSalarios: number;
+  despesasOutras: number;
+  totalDespesasOp: number;
+  lucroLiquido: number;
+  taxRate: number;
+}
+
+export function generateDREPDF(
+  dreLines: DRELineData[],
+  filterLabel: string,
+  dreData: DREComputedData
+) {
+  const doc = new jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const now = new Date();
+
+  doc.setFontSize(20);
+  doc.setFont("helvetica", "bold");
+  doc.text("Gestor de Empresas Pro", 14, 20);
+
+  doc.setFontSize(12);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100);
+  doc.text("DRE - Demonstrativo de Resultados", 14, 28);
+
+  doc.setFontSize(9);
+  doc.text(`Periodo: ${filterLabel}`, 14, 35);
+  doc.text(`Gerado em: ${format(now, "dd/MM/yyyy HH:mm", { locale: ptBR })}`, 14, 41);
+
+  doc.setDrawColor(200);
+  doc.line(14, 45, pageWidth - 14, 45);
+
+  const rows = dreLines.map((line) => {
+    const indent = line.level === 2 ? "      " : line.level === 1 ? "   " : "";
+    const val = formatCurrencyPDF(Math.abs(line.value) / 100);
+    return [indent + line.label, line.value < 0 ? `(${val})` : val];
+  });
+
+  autoTable(doc, {
+    startY: 50,
+    head: [["Descricao", "Valor (R$)"]],
+    body: rows,
+    theme: "plain",
+    headStyles: { fillColor: [41, 128, 185], textColor: 255, fontStyle: "bold", fontSize: 10 },
+    bodyStyles: { fontSize: 10 },
+    columnStyles: { 1: { halign: "right" } },
+    margin: { left: 14, right: 14 },
+    didParseCell: (data: any) => {
+      if (data.section === "body") {
+        const line = dreLines[data.row.index];
+        if (!line) return;
+        if (line.isBold) data.cell.styles.fontStyle = "bold";
+        if (line.isTotal) {
+          data.cell.styles.fontSize = 11;
+          if (line.color === "positive") {
+            data.cell.styles.textColor = [39, 174, 96];
+          } else if (line.color === "negative") {
+            data.cell.styles.textColor = [231, 76, 60];
+          }
+        } else if (line.color === "negative" && data.column.index === 1) {
+          data.cell.styles.textColor = [231, 76, 60];
+        } else if (line.color === "positive" && data.column.index === 1) {
+          data.cell.styles.textColor = [39, 174, 96];
+        }
+      }
+    },
+  });
+
+  const finalY = (doc as any).lastAutoTable.finalY + 10;
+  const resultLabel = dreData.lucroLiquido >= 0 ? "RESULTADO: LUCRO" : "RESULTADO: PREJUIZO";
+  const resultColor: [number, number, number] = dreData.lucroLiquido >= 0 ? [39, 174, 96] : [231, 76, 60];
+
+  doc.setFontSize(14);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(...resultColor);
+  doc.text(resultLabel, 14, finalY);
+  doc.text(formatCurrencyPDF(Math.abs(dreData.lucroLiquido) / 100), pageWidth - 14, finalY, { align: "right" });
+
+  const pageCount = doc.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setTextColor(150);
+    doc.text(
+      `Pagina ${i} de ${pageCount} - Gestor de Empresas Pro`,
+      pageWidth / 2,
+      doc.internal.pageSize.getHeight() - 10,
+      { align: "center" }
+    );
+  }
+
+  doc.save(`dre-${format(now, "yyyy-MM-dd")}.pdf`);
+}
+
+export function openEmailDRE(
+  dreLines: DRELineData[],
+  filterLabel: string,
+  dreData: DREComputedData
+) {
+  const subject = `DRE - ${filterLabel} - Gestor de Empresas Pro`;
+  const lines = [
+    "GESTOR DE EMPRESAS PRO",
+    `DRE - Demonstrativo de Resultados`,
+    `Periodo: ${filterLabel}`,
+    `Gerado em: ${format(new Date(), "dd/MM/yyyy HH:mm", { locale: ptBR })}`,
+    "",
+    "=== DEMONSTRATIVO ===",
+  ];
+  for (const dl of dreLines) {
+    const indent = dl.level === 2 ? "      " : dl.level === 1 ? "   " : "";
+    const val = formatCurrencyPDF(Math.abs(dl.value) / 100);
+    const sign = dl.value < 0 ? `(${val})` : val;
+    lines.push(`${indent}${dl.label}: ${sign}`);
+  }
+  lines.push("");
+  const resultLabel = dreData.lucroLiquido >= 0 ? "RESULTADO: LUCRO" : "RESULTADO: PREJUIZO";
+  lines.push(`${resultLabel}: ${formatCurrencyPDF(Math.abs(dreData.lucroLiquido) / 100)}`);
+  lines.push("", "---", "Gestor de Empresas Pro - Documento gerado automaticamente");
+  const body = lines.join("\n");
+  window.open(`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`, "_self");
+}
+
 export function printTable(title: string, elementId: string) {
   const element = document.getElementById(elementId);
   if (!element) return;

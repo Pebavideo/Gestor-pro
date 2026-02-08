@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useTransactions, useDeleteTransaction, useUpdateTransaction, formatCurrency } from "@/hooks/use-transactions";
+import { useTransactions, useDeleteTransaction, useUpdateTransaction, useToggleReconciled, formatCurrency } from "@/hooks/use-transactions";
 import { useAuth } from "@/hooks/use-auth";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { CurrencyInput, parseBRL, centsToFormatted } from "@/components/CurrencyInput";
-import { Trash2, ArrowUpRight, ArrowDownRight, Inbox, Pencil, Share2 } from "lucide-react";
+import { Trash2, ArrowUpRight, ArrowDownRight, Inbox, Pencil, Share2, CheckCircle2, Circle } from "lucide-react";
 import { generateWhatsAppMessage, openWhatsApp } from "@/lib/pdf-generator";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -20,6 +20,7 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
   const { data: transactions, isLoading } = useTransactions();
   const { mutate: deleteTx, isPending: isDeleting } = useDeleteTransaction();
   const updateMutation = useUpdateTransaction();
+  const reconcileMutation = useToggleReconciled();
   const { isAdmin } = useAuth();
 
   const [editTx, setEditTx] = useState<Transaction | null>(null);
@@ -85,10 +86,11 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
         <Table>
           <TableHeader className="bg-muted/30">
             <TableRow className="hover:bg-transparent border-border/50">
-              <TableHead className="w-[40%] pl-6">Descricao</TableHead>
+              <TableHead className="w-[35%] pl-6">Descricao</TableHead>
               <TableHead>Data</TableHead>
               <TableHead>Tipo</TableHead>
               <TableHead className="text-right">Valor</TableHead>
+              <TableHead className="text-center">Conciliada</TableHead>
               <TableHead className="w-[120px] text-right pr-6">Acoes</TableHead>
             </TableRow>
           </TableHeader>
@@ -122,6 +124,30 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
                 </TableCell>
                 <TableCell className={`text-right font-mono font-medium ${tx.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
                   {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount / 100)}
+                </TableCell>
+                <TableCell className="text-center">
+                  {isAdmin ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => reconcileMutation.mutate(tx.id)}
+                      disabled={reconcileMutation.isPending}
+                      data-testid={`button-reconcile-${tx.id}`}
+                      title={tx.reconciled ? "Marcar como nao conciliada" : "Marcar como conciliada"}
+                    >
+                      {tx.reconciled ? (
+                        <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+                      ) : (
+                        <Circle className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </Button>
+                  ) : (
+                    tx.reconciled ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500 mx-auto" />
+                    ) : (
+                      <Circle className="h-4 w-4 text-muted-foreground mx-auto" />
+                    )
+                  )}
                 </TableCell>
                 <TableCell className="text-right pr-6">
                   <div className="flex items-center justify-end gap-1">
@@ -214,14 +240,37 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
                     {tx.type === 'income' ? 'Entrada' : 'Saida'}
                   </Badge>
                 </div>
-                <div className="text-sm text-muted-foreground font-mono mt-1">
-                  {format(new Date(tx.date), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-sm text-muted-foreground font-mono">
+                    {format(new Date(tx.date), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                  </span>
+                  {tx.reconciled ? (
+                    <Badge variant="secondary" className="bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400 text-[10px] px-1.5 py-0">
+                      Conciliada
+                    </Badge>
+                  ) : null}
                 </div>
                 <div className="flex items-center justify-between gap-2 mt-2 flex-wrap">
                   <span className={`font-mono font-medium text-base ${tx.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
                     {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount / 100)}
                   </span>
                   <div className="flex items-center gap-1">
+                    {isAdmin && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => reconcileMutation.mutate(tx.id)}
+                        disabled={reconcileMutation.isPending}
+                        data-testid={`card-button-reconcile-${tx.id}`}
+                        title={tx.reconciled ? "Desmarcar conciliacao" : "Conciliar"}
+                      >
+                        {tx.reconciled ? (
+                          <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                        ) : (
+                          <Circle className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"

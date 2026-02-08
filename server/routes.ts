@@ -94,6 +94,69 @@ export async function registerRoutes(
     }
   });
 
+  app.patch("/api/transactions/:id/reconcile", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id as string);
+    if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
+    const userId = getUserId(req);
+    const updated = await storage.toggleReconciled(id, userId);
+    if (!updated) return res.status(404).json({ message: "Transacao nao encontrada" });
+    res.json(updated);
+  });
+
+  app.post("/api/transactions/import-csv", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const { rows } = req.body;
+      if (!Array.isArray(rows) || rows.length === 0) {
+        return res.status(400).json({ message: "Nenhum dado encontrado no arquivo." });
+      }
+      const created: any[] = [];
+      for (const row of rows) {
+        const description = String(row.description || row.descricao || row.historico || "Importacao CSV").trim();
+        let rawAmount = row.amount || row.valor || row.value || "0";
+        if (typeof rawAmount === "string") {
+          rawAmount = rawAmount.replace(/[R$\s]/g, "").replace(/\./g, "").replace(",", ".");
+        }
+        const amount = Math.abs(Math.round(parseFloat(rawAmount) * 100));
+        if (isNaN(amount) || amount === 0) continue;
+
+        let type = "expense";
+        if (row.type === "income" || row.tipo === "entrada" || row.tipo === "receita" ||
+            (typeof rawAmount === "string" && !rawAmount.startsWith("-")) ||
+            parseFloat(String(row.amount || row.valor || row.value || "0").replace(/[R$\s.]/g, "").replace(",", ".")) > 0) {
+          if (row.type === "income" || row.tipo === "entrada" || row.tipo === "receita") {
+            type = "income";
+          }
+        }
+        if (row.type === "expense" || row.tipo === "saida" || row.tipo === "despesa") {
+          type = "expense";
+        }
+
+        let dateVal = new Date();
+        if (row.date || row.data) {
+          const rawDate = String(row.date || row.data);
+          const parts = rawDate.split("/");
+          if (parts.length === 3) {
+            dateVal = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+          } else {
+            const parsed = new Date(rawDate);
+            if (!isNaN(parsed.getTime())) dateVal = parsed;
+          }
+        }
+
+        const [tx] = await (await import("./db")).db
+          .insert((await import("@shared/schema")).transactions)
+          .values({ description, amount, type, userId, date: dateVal })
+          .returning();
+        created.push(tx);
+      }
+      res.status(201).json({ message: `${created.length} transacao(es) importada(s) com sucesso.`, count: created.length });
+    } catch (err) {
+      console.error("CSV import error:", err);
+      res.status(500).json({ message: "Erro ao importar arquivo." });
+    }
+  });
+
   app.delete(api.transactions.delete.path, isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
     const id = parseInt(req.params.id as string);
     if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });

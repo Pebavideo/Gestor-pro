@@ -131,6 +131,61 @@ export function useDeleteTransaction() {
   });
 }
 
+export function useToggleReconciled() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (id: number) => {
+      const res = await fetch(`/api/transactions/${id}/reconcile`, {
+        method: "PATCH",
+        credentials: "include",
+      });
+      if (res.status === 403) throw new Error("Apenas administradores podem conciliar transacoes.");
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Erro ao conciliar");
+      }
+      return await res.json() as Transaction;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });
+    },
+    onError: (error) => {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    },
+  });
+}
+
+export function useImportCSV() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (rows: any[]) => {
+      const res = await fetch("/api/transactions/import-csv", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rows }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Erro ao importar");
+      }
+      return await res.json() as { message: string; count: number };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });
+      queryClient.invalidateQueries({ queryKey: [api.summary.get.path] });
+      toast({ title: "Importacao concluida", description: data.message });
+    },
+    onError: (error) => {
+      toast({ title: "Erro na importacao", description: error.message, variant: "destructive" });
+    },
+  });
+}
+
 export function useSummary() {
   return useQuery({
     queryKey: [api.summary.get.path],

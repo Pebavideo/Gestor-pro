@@ -7,6 +7,7 @@ import { useAuth } from "@/hooks/use-auth";
 import Dashboard from "@/pages/Dashboard";
 import TeamManagement from "@/pages/TeamManagement";
 import Products from "@/pages/Products";
+import DRE from "@/pages/DRE";
 import AuthPage from "@/pages/AuthPage";
 import NotFound from "@/pages/not-found";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -26,7 +27,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import { Layers, LayoutDashboard, Users, Package, LogOut } from "lucide-react";
+import { Layers, LayoutDashboard, Users, Package, LogOut, BarChart3 } from "lucide-react";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { useEffect } from "react";
 
@@ -40,6 +41,7 @@ function AppSidebar() {
 
   const navItems = [
     { path: "/", label: "Painel Financeiro", icon: LayoutDashboard, testId: "dashboard" },
+    { path: "/dre", label: "DRE", icon: BarChart3, testId: "dre" },
     { path: "/produtos", label: "Produtos", icon: Package, testId: "products" },
     { path: "/equipe", label: "Gestao de Equipe", icon: Users, testId: "team" },
   ];
@@ -138,6 +140,7 @@ function AppLayout() {
             <div className="container mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
               <Switch>
                 <Route path="/" component={Dashboard} />
+                <Route path="/dre" component={DRE} />
                 <Route path="/produtos" component={Products} />
                 <Route path="/equipe" component={TeamManagement} />
                 <Route component={NotFound} />

@@ -4,6 +4,11 @@
 Financial management dashboard for businesses. Multi-user system with role-based permissions (Admin/Operator). Built with React + Express + PostgreSQL. All UI in Portuguese.
 
 ## Recent Changes
+- 2026-02-08: Added DRE (Demonstrativo de Resultados) page with income statement: Receita Bruta, Impostos, CPV, Despesas Operacionais, Lucro Liquido
+- 2026-02-08: DRE with color-coded lines (green for positive, red for negative/loss), year/month filters, PDF export and email
+- 2026-02-08: Bank reconciliation: toggle transactions as 'Conciliada' with checkmark icon in transaction table
+- 2026-02-08: CSV bank statement import: parse CSV files with flexible column names (description/descricao, amount/valor, date/data, type/tipo)
+- 2026-02-08: Added 'reconciled' field (integer 0/1) to transactions table
 - 2026-02-08: Added email button (envelope icon) to Dashboard and TeamManagement for sending reports via email
 - 2026-02-08: Email opens mailto: draft with full financial summary or employee list in the message body
 - 2026-02-08: Removed 'Salario Medio' card from TeamManagement, kept only 'Total de Funcionarios' and 'Folha Mensal'
@@ -41,7 +46,7 @@ Financial management dashboard for businesses. Multi-user system with role-based
 
 ### Key Tables
 - `users`: id (varchar UUID), email (unique), firstName, lastName, passwordHash, emailVerified, verificationCode, verificationCodeExpiresAt, role ('admin'|'operator'), createdAt, updatedAt
-- `transactions`: id (serial), description, amount (cents), type, userId, date
+- `transactions`: id (serial), description, amount (cents), type, userId, date, reconciled (0/1)
 - `employees`: id (serial), name, position, salary (cents), userId, active (1/0), createdAt
 - `products`: id (serial), name, quantity, price (cents), userId, active (1/0), createdAt
 - `settings`: id (serial), userId (unique), taxRate
@@ -66,7 +71,8 @@ Financial management dashboard for businesses. Multi-user system with role-based
 - `client/src/` - React frontend (all Portuguese)
 - `client/src/App.tsx` - Main app with sidebar navigation
 - `client/src/pages/AuthPage.tsx` - Login/Register/Verify unified auth page
-- `client/src/pages/Dashboard.tsx` - Financial dashboard with month filter
+- `client/src/pages/Dashboard.tsx` - Financial dashboard with month filter, CSV import, reconciliation
+- `client/src/pages/DRE.tsx` - DRE income statement with filters, PDF export, email
 - `client/src/pages/Products.tsx` - Product/inventory management
 - `client/src/pages/TeamManagement.tsx` - Employee management and payroll
 - `server/auth.ts` - Custom authentication module (session, routes, middleware)

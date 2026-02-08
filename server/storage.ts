@@ -16,6 +16,8 @@ export interface IStorage {
   deleteTransaction(id: number, userId: string): Promise<boolean>;
   getTransaction(id: number): Promise<Transaction | undefined>;
   
+  toggleReconciled(id: number, userId: string): Promise<Transaction | null>;
+
   getSettings(userId: string): Promise<Settings>;
   updateSettings(settings: InsertSettings, userId: string): Promise<Settings>;
 
@@ -74,6 +76,19 @@ export class DatabaseStorage implements IStorage {
     if (tx.userId !== userId) return false;
     await db.delete(transactions).where(eq(transactions.id, id));
     return true;
+  }
+
+  async toggleReconciled(id: number, userId: string): Promise<Transaction | null> {
+    const [existing] = await db.select().from(transactions)
+      .where(and(eq(transactions.id, id), eq(transactions.userId, userId)));
+    if (!existing) return null;
+    const newVal = existing.reconciled === 1 ? 0 : 1;
+    const [updated] = await db
+      .update(transactions)
+      .set({ reconciled: newVal })
+      .where(and(eq(transactions.id, id), eq(transactions.userId, userId)))
+      .returning();
+    return updated;
   }
 
   async getSettings(userId: string): Promise<Settings> {

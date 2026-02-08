@@ -1,16 +1,17 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { useTransactions, formatCurrency } from "@/hooks/use-transactions";
+import { useTransactions, useImportCSV, formatCurrency } from "@/hooks/use-transactions";
 import { useSettings } from "@/hooks/use-transactions";
 import { useAuth } from "@/hooks/use-auth";
 import { StatsCard } from "@/components/StatsCard";
 import { CreateTransactionDialog } from "@/components/CreateTransactionDialog";
 import { TransactionTable } from "@/components/TransactionTable";
-import { TrendingUp, TrendingDown, Landmark, Wallet, CalendarDays, FileDown, Printer, Mail } from "lucide-react";
+import { TrendingUp, TrendingDown, Landmark, Wallet, CalendarDays, FileDown, Printer, Mail, Upload } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { generateDashboardPDF, printTable, openEmailDashboard } from "@/lib/pdf-generator";
+import { useToast } from "@/hooks/use-toast";
 
 const MONTH_NAMES = [
   "Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho",
@@ -21,6 +22,9 @@ export default function Dashboard() {
   const { data: transactions, isLoading: txLoading } = useTransactions();
   const { data: settingsData, isLoading: settingsLoading } = useSettings();
   const { isAdmin } = useAuth();
+  const importCSV = useImportCSV();
+  const { toast } = useToast();
+  const csvInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedYear, setSelectedYear] = useState<string>("all");
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
@@ -108,6 +112,36 @@ export default function Dashboard() {
     printTable(`Relatorio Financeiro - ${filterLabel}`, "printable-transactions");
   }
 
+  function handleCSVImport(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const text = evt.target?.result as string;
+        const lines = text.split("\n").filter((l) => l.trim());
+        if (lines.length < 2) {
+          toast({ title: "Arquivo vazio", description: "O arquivo CSV nao contem dados.", variant: "destructive" });
+          return;
+        }
+        const headers = lines[0].split(/[;,]/).map((h) => h.trim().toLowerCase().replace(/"/g, ""));
+        const rows: any[] = [];
+        for (let i = 1; i < lines.length; i++) {
+          const values = lines[i].split(/[;,]/).map((v) => v.trim().replace(/"/g, ""));
+          if (values.length < 2) continue;
+          const row: any = {};
+          headers.forEach((h, idx) => { row[h] = values[idx] || ""; });
+          rows.push(row);
+        }
+        importCSV.mutate(rows);
+      } catch {
+        toast({ title: "Erro", description: "Nao foi possivel ler o arquivo CSV.", variant: "destructive" });
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -148,6 +182,28 @@ export default function Dashboard() {
             )}
           </div>
           <CreateTransactionDialog />
+          {isAdmin && (
+            <>
+              <input
+                ref={csvInputRef}
+                type="file"
+                accept=".csv"
+                onChange={handleCSVImport}
+                className="hidden"
+                data-testid="input-csv-import"
+              />
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => csvInputRef.current?.click()}
+                disabled={importCSV.isPending}
+                data-testid="button-import-csv"
+                title="Importar Extrato CSV"
+              >
+                <Upload className="h-4 w-4" />
+              </Button>
+            </>
+          )}
           <Button
             variant="outline"
             size="icon"

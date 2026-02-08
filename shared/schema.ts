@@ -11,6 +11,7 @@ export const transactions = pgTable("transactions", {
   type: text("type").notNull(),
   userId: varchar("user_id").notNull(),
   date: timestamp("date").defaultNow().notNull(),
+  reconciled: integer("reconciled").notNull().default(0),
 });
 
 export const settings = pgTable("settings", {
