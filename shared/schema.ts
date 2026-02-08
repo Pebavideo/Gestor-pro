@@ -19,6 +19,25 @@ export const settings = pgTable("settings", {
   taxRate: numeric("tax_rate").notNull().default("15"),
 });
 
+export const employees = pgTable("employees", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  position: text("position").notNull(),
+  salary: integer("salary").notNull(),
+  userId: varchar("user_id").notNull(),
+  active: integer("active").notNull().default(1),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertEmployeeSchema = createInsertSchema(employees).pick({
+  name: true,
+  position: true,
+  salary: true,
+});
+
+export type Employee = typeof employees.$inferSelect;
+export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
+
 export const insertTransactionSchema = createInsertSchema(transactions).pick({
   description: true,
   amount: true,

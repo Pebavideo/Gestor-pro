@@ -45,8 +45,9 @@ export function SettingsDialog() {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline" size="icon" className="rounded-xl border-border/60 hover:bg-muted">
-          <SettingsIcon className="h-5 w-5 text-muted-foreground" />
+        <Button variant="ghost" className="w-full justify-start gap-3" data-testid="button-settings">
+          <SettingsIcon className="h-4 w-4" />
+          Configuracoes
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[400px] rounded-2xl">

@@ -3,6 +3,7 @@ import type { Server } from "http";
 import { storage } from "./storage";
 import { api } from "@shared/routes";
 import { z } from "zod";
+import { insertEmployeeSchema } from "@shared/schema";
 import { setupAuth, registerAuthRoutes, isAuthenticated, getUserId } from "./auth";
 
 async function requireAdmin(req: Request, res: Response, next: NextFunction) {
@@ -134,6 +135,63 @@ export async function registerRoutes(
     }
     await storage.setUserRole(userId, role);
     res.json({ message: "Perfil atualizado" });
+  });
+
+  // ====== Employee Routes ======
+  app.get("/api/employees", isAuthenticated, requireVerified, async (req, res) => {
+    const userId = getUserId(req);
+    const emps = await storage.getEmployees(userId);
+    res.json(emps);
+  });
+
+  app.post("/api/employees", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+    try {
+      const userId = getUserId(req);
+      const input = insertEmployeeSchema.parse(req.body);
+      const employee = await storage.createEmployee(input, userId);
+      res.status(201).json(employee);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
+      }
+      throw err;
+    }
+  });
+
+  app.patch("/api/employees/:id", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id as string);
+      if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
+      const userId = getUserId(req);
+      const input = insertEmployeeSchema.partial().parse(req.body);
+      const employee = await storage.updateEmployee(id, input, userId);
+      if (!employee) return res.status(404).json({ message: "Funcionario nao encontrado" });
+      res.json(employee);
+    } catch (err) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: err.errors[0].message, field: err.errors[0].path.join('.') });
+      }
+      throw err;
+    }
+  });
+
+  app.delete("/api/employees/:id", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+    const id = parseInt(req.params.id as string);
+    if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
+    const userId = getUserId(req);
+    const deleted = await storage.deleteEmployee(id, userId);
+    if (!deleted) return res.status(404).json({ message: "Funcionario nao encontrado" });
+    res.status(204).send();
+  });
+
+  app.post("/api/employees/payroll", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
+    const userId = getUserId(req);
+    const emps = await storage.getEmployees(userId);
+    if (emps.length === 0) {
+      return res.status(400).json({ message: "Nenhum funcionario cadastrado para processar folha de pagamento." });
+    }
+    const txs = await storage.processPayroll(userId);
+    res.status(201).json({ message: `Folha de pagamento processada. ${txs.length} lancamento(s) criado(s).`, transactions: txs });
   });
 
   app.patch("/api/user/make-admin", isAuthenticated, requireVerified, async (req, res) => {

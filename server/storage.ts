@@ -1,8 +1,9 @@
 import { db } from "./db";
 import { 
-  transactions, settings, users,
+  transactions, settings, users, employees,
   type Transaction, type InsertTransaction, 
-  type Settings, type InsertSettings
+  type Settings, type InsertSettings,
+  type Employee, type InsertEmployee
 } from "@shared/schema";
 import { eq, desc, and } from "drizzle-orm";
 import type { User } from "@shared/models/auth";
@@ -18,6 +19,12 @@ export interface IStorage {
 
   getUserRole(userId: string): Promise<string>;
   setUserRole(userId: string, role: string): Promise<void>;
+
+  getEmployees(userId: string): Promise<Employee[]>;
+  createEmployee(employee: InsertEmployee, userId: string): Promise<Employee>;
+  updateEmployee(id: number, employee: Partial<InsertEmployee>, userId: string): Promise<Employee | null>;
+  deleteEmployee(id: number, userId: string): Promise<boolean>;
+  processPayroll(userId: string): Promise<Transaction[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -78,6 +85,58 @@ export class DatabaseStorage implements IStorage {
 
   async setUserRole(userId: string, role: string): Promise<void> {
     await db.update(users).set({ role }).where(eq(users.id, userId));
+  }
+
+  async getEmployees(userId: string): Promise<Employee[]> {
+    return await db.select().from(employees)
+      .where(and(eq(employees.userId, userId), eq(employees.active, 1)))
+      .orderBy(desc(employees.createdAt));
+  }
+
+  async createEmployee(employee: InsertEmployee, userId: string): Promise<Employee> {
+    const [created] = await db
+      .insert(employees)
+      .values({ ...employee, userId })
+      .returning();
+    return created;
+  }
+
+  async updateEmployee(id: number, employee: Partial<InsertEmployee>, userId: string): Promise<Employee | null> {
+    const [existing] = await db.select().from(employees)
+      .where(and(eq(employees.id, id), eq(employees.userId, userId)));
+    if (!existing) return null;
+    const [updated] = await db
+      .update(employees)
+      .set(employee)
+      .where(eq(employees.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteEmployee(id: number, userId: string): Promise<boolean> {
+    const [existing] = await db.select().from(employees)
+      .where(and(eq(employees.id, id), eq(employees.userId, userId)));
+    if (!existing) return false;
+    await db.update(employees).set({ active: 0 }).where(eq(employees.id, id));
+    return true;
+  }
+
+  async processPayroll(userId: string): Promise<Transaction[]> {
+    const activeEmployees = await this.getEmployees(userId);
+    const created: Transaction[] = [];
+    for (const emp of activeEmployees) {
+      const [tx] = await db
+        .insert(transactions)
+        .values({
+          description: `Salario - ${emp.name}`,
+          amount: emp.salary,
+          type: "expense",
+          userId,
+        })
+        .returning();
+      created.push(tx);
+    }
+    return created;
   }
 }
 
