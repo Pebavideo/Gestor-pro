@@ -352,9 +352,14 @@ export default function TeamManagement() {
                           data-testid="input-employee-admission-date"
                         />
                       </div>
-                      <Button type="submit" className="w-full" disabled={createMutation.isPending} data-testid="button-submit-employee">
-                        {createMutation.isPending ? "Salvando..." : "Cadastrar"}
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button type="button" variant="outline" className="flex-1" onClick={() => setCreateOpen(false)} data-testid="button-cancel-employee">
+                          Cancelar
+                        </Button>
+                        <Button type="submit" className="flex-1" disabled={createMutation.isPending} data-testid="button-submit-employee">
+                          {createMutation.isPending ? "Salvando..." : "Cadastrar"}
+                        </Button>
+                      </div>
                     </form>
                   </Form>
                 </DialogContent>
@@ -740,9 +745,14 @@ export default function TeamManagement() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button type="submit" className="w-full" disabled={editMutation.isPending} data-testid="button-submit-edit-employee">
-                {editMutation.isPending ? "Salvando..." : "Salvar Alteracoes"}
-              </Button>
+              <div className="flex gap-2">
+                <Button type="button" variant="outline" className="flex-1" onClick={() => setEditingEmployee(null)} data-testid="button-cancel-edit-employee">
+                  Cancelar
+                </Button>
+                <Button type="submit" className="flex-1" disabled={editMutation.isPending} data-testid="button-submit-edit-employee">
+                  {editMutation.isPending ? "Salvando..." : "Salvar Alteracoes"}
+                </Button>
+              </div>
             </form>
           </Form>
         </DialogContent>

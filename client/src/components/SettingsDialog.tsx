@@ -85,13 +85,25 @@ export function SettingsDialog() {
               )}
             />
 
-            <Button 
-              type="submit" 
-              disabled={isPending}
-              className="w-full h-11 rounded-xl"
-            >
-              {isPending ? "Salvando..." : "Salvar Configurações"}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setOpen(false)}
+                className="flex-1 h-11 rounded-xl"
+                data-testid="button-cancel-settings"
+              >
+                Cancelar
+              </Button>
+              <Button 
+                type="submit" 
+                disabled={isPending}
+                className="flex-1 h-11 rounded-xl"
+                data-testid="button-submit-settings"
+              >
+                {isPending ? "Salvando..." : "Salvar"}
+              </Button>
+            </div>
           </form>
         </Form>
       </DialogContent>
