@@ -18,30 +18,41 @@ export default function Dashboard() {
   const { data: settingsData, isLoading: settingsLoading } = useSettings();
   const { isAdmin } = useAuth();
 
-  const now = new Date();
-  const [filterValue, setFilterValue] = useState("all");
+  const [selectedYear, setSelectedYear] = useState<string>("all");
+  const [selectedMonth, setSelectedMonth] = useState<string>("all");
 
-  const monthFilter = useMemo(() => {
-    if (filterValue === "all") return null;
-    const [y, m] = filterValue.split("-").map(Number);
-    return { year: y, month: m };
-  }, [filterValue]);
-
-  const availableMonths = useMemo(() => {
+  const availableYears = useMemo(() => {
     if (!transactions) return [];
-    const set = new Map<string, { year: number; month: number }>();
+    const years = new Set<number>();
+    for (const tx of transactions) {
+      years.add(new Date(tx.date).getFullYear());
+    }
+    return Array.from(years).sort((a, b) => b - a);
+  }, [transactions]);
+
+  const availableMonthsForYear = useMemo(() => {
+    if (!transactions || selectedYear === "all") return [];
+    const year = parseInt(selectedYear);
+    const months = new Set<number>();
     for (const tx of transactions) {
       const d = new Date(tx.date);
-      const key = `${d.getFullYear()}-${d.getMonth()}`;
-      if (!set.has(key)) {
-        set.set(key, { year: d.getFullYear(), month: d.getMonth() });
+      if (d.getFullYear() === year) {
+        months.add(d.getMonth());
       }
     }
-    return Array.from(set.values()).sort((a, b) => {
-      if (a.year !== b.year) return b.year - a.year;
-      return b.month - a.month;
-    });
-  }, [transactions]);
+    return Array.from(months).sort((a, b) => a - b);
+  }, [transactions, selectedYear]);
+
+  const monthFilter = useMemo(() => {
+    if (selectedYear === "all") return null;
+    if (selectedMonth === "all") return { year: parseInt(selectedYear), month: null };
+    return { year: parseInt(selectedYear), month: parseInt(selectedMonth) };
+  }, [selectedYear, selectedMonth]);
+
+  function handleYearChange(value: string) {
+    setSelectedYear(value);
+    setSelectedMonth("all");
+  }
 
   const summary = useMemo(() => {
     if (!transactions) return { totalIncome: 0, totalExpenses: 0, taxAmount: 0, netProfit: 0, currentTaxRate: 0 };
@@ -49,7 +60,9 @@ export default function Dashboard() {
     const filtered = monthFilter
       ? transactions.filter((tx) => {
           const d = new Date(tx.date);
-          return d.getFullYear() === monthFilter.year && d.getMonth() === monthFilter.month;
+          if (d.getFullYear() !== monthFilter.year) return false;
+          if (monthFilter.month !== null && d.getMonth() !== monthFilter.month) return false;
+          return true;
         })
       : transactions;
 
@@ -67,8 +80,10 @@ export default function Dashboard() {
   const isLoading = txLoading || settingsLoading;
 
   const filterLabel = monthFilter
-    ? `${MONTH_NAMES[monthFilter.month]} ${monthFilter.year}`
-    : "Todos os meses";
+    ? monthFilter.month !== null
+      ? `${MONTH_NAMES[monthFilter.month]} ${monthFilter.year}`
+      : `${monthFilter.year}`
+    : "Todos os periodos";
 
   return (
     <div className="space-y-6">
@@ -80,19 +95,34 @@ export default function Dashboard() {
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-2">
             <CalendarDays className="h-4 w-4 text-muted-foreground" />
-            <Select value={filterValue} onValueChange={setFilterValue}>
-              <SelectTrigger className="w-[180px]" data-testid="select-month-filter">
-                <SelectValue placeholder="Filtrar por mes" />
+            <Select value={selectedYear} onValueChange={handleYearChange}>
+              <SelectTrigger className="w-[120px]" data-testid="select-year-filter">
+                <SelectValue placeholder="Ano" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all" data-testid="option-month-all">Todos os meses</SelectItem>
-                {availableMonths.map((m) => (
-                  <SelectItem key={`${m.year}-${m.month}`} value={`${m.year}-${m.month}`} data-testid={`option-month-${m.year}-${m.month}`}>
-                    {MONTH_NAMES[m.month]} {m.year}
+                <SelectItem value="all" data-testid="option-year-all">Todos</SelectItem>
+                {availableYears.map((y) => (
+                  <SelectItem key={y} value={String(y)} data-testid={`option-year-${y}`}>
+                    {y}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
+            {selectedYear !== "all" && (
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="w-[140px]" data-testid="select-month-filter">
+                  <SelectValue placeholder="Mes" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" data-testid="option-month-all">Todos os meses</SelectItem>
+                  {availableMonthsForYear.map((m) => (
+                    <SelectItem key={m} value={String(m)} data-testid={`option-month-${m}`}>
+                      {MONTH_NAMES[m]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <CreateTransactionDialog />
         </div>
@@ -139,7 +169,7 @@ export default function Dashboard() {
 
       <div className="space-y-4">
         <div>
-          <h3 className="text-lg font-semibold">Transacoes {monthFilter ? `- ${MONTH_NAMES[monthFilter.month]} ${monthFilter.year}` : "Recentes"}</h3>
+          <h3 className="text-lg font-semibold">Transacoes {monthFilter ? `- ${monthFilter.month !== null ? MONTH_NAMES[monthFilter.month] + " " : ""}${monthFilter.year}` : "Recentes"}</h3>
           <p className="text-muted-foreground text-sm mt-1">Gerencie suas entradas e saidas.</p>
         </div>
         <TransactionTable monthFilter={monthFilter} />

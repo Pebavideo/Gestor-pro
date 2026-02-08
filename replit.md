@@ -6,6 +6,7 @@ Financial management dashboard for businesses. Multi-user system with role-based
 ## Recent Changes
 - 2026-02-08: Added Products/Inventory module (CRUD, stock tracking, price management)
 - 2026-02-08: Income transactions can link to products to auto-decrement stock
+- 2026-02-08: Upgraded Dashboard filter to support Year + Month selectors (multi-year history)
 - 2026-02-08: Added month filter to Dashboard for viewing profit by specific months
 - 2026-02-08: Added transaction editing (PATCH /api/transactions/:id) with inline edit dialog
 - 2026-02-08: Fixed payroll descriptions from "Salario" to "Pagamento"

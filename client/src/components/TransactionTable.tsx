@@ -14,7 +14,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { Transaction } from "@shared/schema";
 
-export function TransactionTable({ monthFilter }: { monthFilter?: { year: number; month: number } | null }) {
+export function TransactionTable({ monthFilter }: { monthFilter?: { year: number; month: number | null } | null }) {
   const { data: transactions, isLoading } = useTransactions();
   const { mutate: deleteTx, isPending: isDeleting } = useDeleteTransaction();
   const updateMutation = useUpdateTransaction();
@@ -44,7 +44,9 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
     ? monthFilter
       ? transactions.filter((tx) => {
           const d = new Date(tx.date);
-          return d.getFullYear() === monthFilter.year && d.getMonth() === monthFilter.month;
+          if (d.getFullYear() !== monthFilter.year) return false;
+          if (monthFilter.month !== null && d.getMonth() !== monthFilter.month) return false;
+          return true;
         })
       : transactions
     : [];
