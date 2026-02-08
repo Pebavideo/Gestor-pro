@@ -344,118 +344,220 @@ export default function TeamManagement() {
           </p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-border/50 bg-card overflow-hidden shadow-sm">
-          <Table>
-            <TableHeader className="bg-muted/30">
-              <TableRow className="hover:bg-transparent border-border/50">
-                <TableHead className="pl-6">Nome</TableHead>
-                <TableHead>Cargo</TableHead>
-                <TableHead className="text-right">Salario Mensal</TableHead>
-                {isAdmin && <TableHead className="text-right pr-6">Acoes</TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {employees.map((emp) => (
-                <TableRow
-                  key={emp.id}
-                  className="hover:bg-muted/30 border-border/50 transition-colors"
-                  data-testid={`row-employee-${emp.id}`}
-                >
-                  <TableCell className="pl-6">
-                    <div className="flex items-center gap-3">
-                      <div className="p-2 rounded-lg bg-primary/10 text-primary">
-                        <Users className="w-4 h-4" />
-                      </div>
-                      <span className="font-medium" data-testid={`text-employee-name-${emp.id}`}>{emp.name}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" data-testid={`text-employee-position-${emp.id}`}>
-                      {emp.position}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-mono font-medium" data-testid={`text-employee-salary-${emp.id}`}>
-                    {formatCurrency(emp.salary / 100)}
-                  </TableCell>
-                  {isAdmin && (
-                    <TableCell className="text-right pr-6">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => openEdit(emp)}
-                          data-testid={`button-edit-employee-${emp.id}`}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              disabled={payEmployeeMutation.isPending}
-                              data-testid={`button-pay-employee-${emp.id}`}
-                            >
-                              <DollarSign className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Lancar Pagamento Individual</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Sera criado um lancamento de saida no valor de{" "}
-                                <span className="font-semibold text-foreground">{formatCurrency(emp.salary / 100)}</span>{" "}
-                                referente ao salario de <span className="font-semibold text-foreground">{emp.name}</span>.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => payEmployeeMutation.mutate(emp.id)}
-                                data-testid={`button-confirm-pay-employee-${emp.id}`}
-                              >
-                                Confirmar Pagamento
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              data-testid={`button-delete-employee-${emp.id}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Remover funcionario?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                O funcionario <span className="font-semibold">{emp.name}</span> sera desativado e nao aparecera mais na folha de pagamento.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => deleteMutation.mutate(emp.id)}
-                                className="bg-destructive"
-                                data-testid={`button-confirm-delete-employee-${emp.id}`}
-                              >
-                                Remover
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+        <>
+          <div className="hidden sm:block rounded-2xl border border-border/50 bg-card overflow-hidden shadow-sm">
+            <Table>
+              <TableHeader className="bg-muted/30">
+                <TableRow className="hover:bg-transparent border-border/50">
+                  <TableHead className="pl-6">Nome</TableHead>
+                  <TableHead>Cargo</TableHead>
+                  <TableHead className="text-right">Salario Mensal</TableHead>
+                  {isAdmin && <TableHead className="text-right pr-6">Acoes</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {employees.map((emp) => (
+                  <TableRow
+                    key={emp.id}
+                    className="hover:bg-muted/30 border-border/50 transition-colors"
+                    data-testid={`row-employee-${emp.id}`}
+                  >
+                    <TableCell className="pl-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-lg bg-primary/10 text-primary">
+                          <Users className="w-4 h-4" />
+                        </div>
+                        <span className="font-medium" data-testid={`text-employee-name-${emp.id}`}>{emp.name}</span>
                       </div>
                     </TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" data-testid={`text-employee-position-${emp.id}`}>
+                        {emp.position}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-mono font-medium" data-testid={`text-employee-salary-${emp.id}`}>
+                      {formatCurrency(emp.salary / 100)}
+                    </TableCell>
+                    {isAdmin && (
+                      <TableCell className="text-right pr-6">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openEdit(emp)}
+                            data-testid={`button-edit-employee-${emp.id}`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                disabled={payEmployeeMutation.isPending}
+                                data-testid={`button-pay-employee-${emp.id}`}
+                              >
+                                <DollarSign className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Lancar Pagamento Individual</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Sera criado um lancamento de saida no valor de{" "}
+                                  <span className="font-semibold text-foreground">{formatCurrency(emp.salary / 100)}</span>{" "}
+                                  referente ao salario de <span className="font-semibold text-foreground">{emp.name}</span>.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => payEmployeeMutation.mutate(emp.id)}
+                                  data-testid={`button-confirm-pay-employee-${emp.id}`}
+                                >
+                                  Confirmar Pagamento
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                data-testid={`button-delete-employee-${emp.id}`}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Remover funcionario?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  O funcionario <span className="font-semibold">{emp.name}</span> sera desativado e nao aparecera mais na folha de pagamento.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => deleteMutation.mutate(emp.id)}
+                                  className="bg-destructive"
+                                  data-testid={`button-confirm-delete-employee-${emp.id}`}
+                                >
+                                  Remover
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          <div className="sm:hidden space-y-3">
+            {employees.map((emp) => (
+              <Card key={emp.id} className="p-4" data-testid={`card-employee-${emp.id}`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
+                      <Users className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="font-medium truncate" data-testid={`card-text-employee-name-${emp.id}`}>{emp.name}</p>
+                      <Badge variant="secondary" className="mt-1" data-testid={`card-text-employee-position-${emp.id}`}>
+                        {emp.position}
+                      </Badge>
+                    </div>
+                  </div>
+                  <Badge variant={emp.active === 1 ? "default" : "secondary"} data-testid={`card-badge-status-${emp.id}`}>
+                    {emp.active === 1 ? "Ativo" : "Inativo"}
+                  </Badge>
+                </div>
+                <div className="mt-3 flex items-center justify-between gap-2 flex-wrap">
+                  <p className="font-mono font-medium text-lg" data-testid={`card-text-employee-salary-${emp.id}`}>
+                    {formatCurrency(emp.salary / 100)}
+                  </p>
+                  {isAdmin && (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => openEdit(emp)}
+                        data-testid={`card-button-edit-employee-${emp.id}`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            disabled={payEmployeeMutation.isPending}
+                            data-testid={`card-button-pay-employee-${emp.id}`}
+                          >
+                            <DollarSign className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Lancar Pagamento Individual</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Sera criado um lancamento de saida no valor de{" "}
+                              <span className="font-semibold text-foreground">{formatCurrency(emp.salary / 100)}</span>{" "}
+                              referente ao salario de <span className="font-semibold text-foreground">{emp.name}</span>.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => payEmployeeMutation.mutate(emp.id)}
+                              data-testid={`card-button-confirm-pay-employee-${emp.id}`}
+                            >
+                              Confirmar Pagamento
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            data-testid={`card-button-delete-employee-${emp.id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Remover funcionario?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              O funcionario <span className="font-semibold">{emp.name}</span> sera desativado e nao aparecera mais na folha de pagamento.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => deleteMutation.mutate(emp.id)}
+                              className="bg-destructive"
+                              data-testid={`card-button-confirm-delete-employee-${emp.id}`}
+                            >
+                              Remover
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   )}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        </>
       )}
 
       <Dialog open={!!editingEmployee} onOpenChange={(open) => !open && setEditingEmployee(null)}>

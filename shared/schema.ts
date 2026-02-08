@@ -49,6 +49,7 @@ export const insertProductSchema = createInsertSchema(products).pick({
   name: true,
   quantity: true,
   price: true,
+  createdAt: true,
 });
 
 export type Employee = typeof employees.$inferSelect;

@@ -11,7 +11,9 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Package, Pencil, Trash2, PackageOpen, ShoppingBag } from "lucide-react";
+import { Plus, Package, Pencil, Trash2, PackageOpen, ShoppingBag, Clock } from "lucide-react";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { CurrencyInput, parseBRL, centsToFormatted } from "@/components/CurrencyInput";
 import type { Product } from "@shared/schema";
 
@@ -35,9 +37,10 @@ export default function Products() {
   const [formName, setFormName] = useState("");
   const [formQuantity, setFormQuantity] = useState("");
   const [formPrice, setFormPrice] = useState("");
+  const [formDate, setFormDate] = useState("");
 
   const createMutation = useMutation({
-    mutationFn: async (data: { name: string; quantity: number; price: number }) => {
+    mutationFn: async (data: { name: string; quantity: number; price: number; createdAt?: string }) => {
       const res = await fetch("/api/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -103,10 +106,19 @@ export default function Products() {
     setFormName("");
     setFormQuantity("");
     setFormPrice("");
+    setFormDate("");
+  };
+
+  const getNowDatetimeLocal = () => {
+    const now = new Date();
+    const offset = now.getTimezoneOffset();
+    const local = new Date(now.getTime() - offset * 60000);
+    return local.toISOString().slice(0, 16);
   };
 
   const openCreate = () => {
     resetForm();
+    setFormDate(getNowDatetimeLocal());
     setShowCreate(true);
   };
 
@@ -121,7 +133,11 @@ export default function Products() {
     const price = Math.round(parseBRL(formPrice) * 100);
     const quantity = parseInt(formQuantity) || 0;
     if (!formName.trim() || isNaN(price) || price <= 0) return;
-    createMutation.mutate({ name: formName.trim(), quantity, price });
+    const data: { name: string; quantity: number; price: number; createdAt?: string } = { name: formName.trim(), quantity, price };
+    if (formDate) {
+      data.createdAt = new Date(formDate).toISOString();
+    }
+    createMutation.mutate(data);
   };
 
   const submitEdit = () => {
@@ -201,11 +217,13 @@ export default function Products() {
           <p className="max-w-xs mx-auto mt-2">Adicione produtos para gerenciar seu estoque.</p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-border/50 bg-card overflow-hidden shadow-sm">
+        <>
+        <div className="hidden sm:block rounded-2xl border border-border/50 bg-card overflow-hidden shadow-sm">
           <Table>
             <TableHeader className="bg-muted/30">
               <TableRow className="hover:bg-transparent border-border/50">
                 <TableHead className="pl-6">Nome</TableHead>
+                <TableHead>Data de Entrada</TableHead>
                 <TableHead className="text-right">Qtd. Estoque</TableHead>
                 <TableHead className="text-right">Preco Sugerido</TableHead>
                 {isAdmin && <TableHead className="text-right pr-6">Acoes</TableHead>}
@@ -220,6 +238,12 @@ export default function Products() {
                         <Package className="w-4 h-4" />
                       </div>
                       <span className="font-medium" data-testid={`text-product-name-${p.id}`}>{p.name}</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    <div className="flex items-center gap-1.5" data-testid={`text-product-date-${p.id}`}>
+                      <Clock className="w-3.5 h-3.5" />
+                      {format(new Date(p.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
@@ -273,6 +297,66 @@ export default function Products() {
             </TableBody>
           </Table>
         </div>
+
+        <div className="sm:hidden space-y-3">
+          {products.map((p) => (
+            <Card key={p.id} className="p-4" data-testid={`card-product-${p.id}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="p-2 rounded-lg bg-primary/10 text-primary shrink-0">
+                    <Package className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="font-medium truncate" data-testid={`text-product-name-${p.id}`}>{p.name}</p>
+                    <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5" data-testid={`text-product-date-${p.id}`}>
+                      <Clock className="w-3 h-3" />
+                      {format(new Date(p.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                    </p>
+                  </div>
+                </div>
+                {isAdmin && (
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button variant="ghost" size="icon" onClick={() => openEdit(p)} data-testid={`button-edit-product-${p.id}`}>
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="ghost" size="icon" data-testid={`button-delete-product-${p.id}`}>
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Remover produto?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            O produto <span className="font-semibold">{p.name}</span> sera desativado e removido da lista.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => deleteMutation.mutate(p.id)} className="bg-destructive">Remover</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-border/50">
+                <Badge
+                  variant="secondary"
+                  className={p.quantity <= 0 ? "bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400" : ""}
+                  data-testid={`text-product-qty-${p.id}`}
+                >
+                  {p.quantity} un.
+                </Badge>
+                <span className="font-mono font-medium" data-testid={`text-product-price-${p.id}`}>
+                  {formatCurrency(p.price / 100)}
+                </span>
+              </div>
+            </Card>
+          ))}
+        </div>
+        </>
       )}
 
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
@@ -293,6 +377,10 @@ export default function Products() {
             <div className="space-y-2">
               <Label htmlFor="create-product-price">Preco Sugerido (R$)</Label>
               <CurrencyInput id="create-product-price" value={formPrice} onChange={setFormPrice} data-testid="input-product-price" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="create-product-date">Data e Hora de Entrada</Label>
+              <Input id="create-product-date" type="datetime-local" value={formDate} onChange={(e) => setFormDate(e.target.value)} data-testid="input-product-date" />
             </div>
           </div>
           <DialogFooter>

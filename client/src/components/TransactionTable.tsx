@@ -12,6 +12,7 @@ import { CurrencyInput, parseBRL, centsToFormatted } from "@/components/Currency
 import { Trash2, ArrowUpRight, ArrowDownRight, Inbox, Pencil } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Card } from "@/components/ui/card";
 import type { Transaction } from "@shared/schema";
 
 export function TransactionTable({ monthFilter }: { monthFilter?: { year: number; month: number | null } | null }) {
@@ -79,7 +80,7 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
 
   return (
     <>
-      <div className="rounded-2xl border border-border/50 bg-card overflow-hidden shadow-sm">
+      <div className="hidden sm:block rounded-2xl border border-border/50 bg-card overflow-hidden shadow-sm">
         <Table>
           <TableHeader className="bg-muted/30">
             <TableRow className="hover:bg-transparent border-border/50">
@@ -102,7 +103,8 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
                   </div>
                 </TableCell>
                 <TableCell className="text-muted-foreground font-mono text-sm">
-                  {format(new Date(tx.date), "dd MMM yyyy", { locale: ptBR })}
+                  <div>{format(new Date(tx.date), "dd MMM yyyy", { locale: ptBR })}</div>
+                  <div className="text-xs text-muted-foreground/70">{format(new Date(tx.date), "HH:mm")}</div>
                 </TableCell>
                 <TableCell>
                   <Badge
@@ -168,6 +170,84 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
             ))}
           </TableBody>
         </Table>
+      </div>
+
+      <div className="sm:hidden space-y-3">
+        {filtered.map((tx) => (
+          <Card key={tx.id} className="p-4" data-testid={`card-row-transaction-${tx.id}`}>
+            <div className="flex items-start gap-3">
+              <div className={`p-2 rounded-lg shrink-0 ${tx.type === 'income' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10' : 'bg-rose-50 text-rose-600 dark:bg-rose-500/10'}`}>
+                {tx.type === 'income' ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="font-medium text-base truncate" data-testid={`card-text-description-${tx.id}`}>{tx.description}</span>
+                  <Badge
+                    variant="secondary"
+                    className={`
+                      font-medium px-2.5 py-0.5 rounded-lg border-0 shrink-0
+                      ${tx.type === 'income'
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-400'
+                        : 'bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400'}
+                    `}
+                  >
+                    {tx.type === 'income' ? 'Entrada' : 'Saida'}
+                  </Badge>
+                </div>
+                <div className="text-sm text-muted-foreground font-mono mt-1">
+                  {format(new Date(tx.date), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                </div>
+                <div className="flex items-center justify-between gap-2 mt-2 flex-wrap">
+                  <span className={`font-mono font-medium text-base ${tx.type === 'income' ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {tx.type === 'income' ? '+' : '-'}{formatCurrency(tx.amount / 100)}
+                  </span>
+                  {isAdmin && (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => openEdit(tx)}
+                        data-testid={`card-button-edit-transaction-${tx.id}`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            data-testid={`card-button-delete-${tx.id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent className="rounded-2xl">
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Excluir transacao?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Esta acao nao pode ser desfeita. O registro sera removido permanentemente dos calculos.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => deleteTx(tx.id)}
+                              disabled={isDeleting}
+                              className="bg-destructive rounded-xl"
+                              data-testid={`card-button-confirm-delete-${tx.id}`}
+                            >
+                              Excluir
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </Card>
+        ))}
       </div>
 
       <Dialog open={!!editTx} onOpenChange={(open) => { if (!open) setEditTx(null); }}>

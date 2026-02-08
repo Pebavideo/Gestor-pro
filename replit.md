@@ -4,6 +4,10 @@
 Financial management dashboard for businesses. Multi-user system with role-based permissions (Admin/Operator). Built with React + Express + PostgreSQL. All UI in Portuguese.
 
 ## Recent Changes
+- 2026-02-08: PWA configured (manifest.json, service worker, Apple meta tags) for Add to Home Screen
+- 2026-02-08: Mobile responsive: tables convert to card layout on small screens, reduced padding
+- 2026-02-08: Products now record date+time of entry (datetime-local input, displayed as dd/MM/yyyy HH:mm)
+- 2026-02-08: Transactions now display time (HH:mm) alongside date
 - 2026-02-08: Added Products/Inventory module (CRUD, stock tracking, price management)
 - 2026-02-08: Income transactions can link to products to auto-decrement stock
 - 2026-02-08: Upgraded Dashboard filter to support Year + Month selectors (multi-year history)

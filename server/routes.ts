@@ -247,8 +247,13 @@ export async function registerRoutes(
   app.post("/api/products", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const input = insertProductSchema.parse(req.body);
-      const product = await storage.createProduct(input, userId);
+      const { createdAt, ...rest } = req.body;
+      const input = insertProductSchema.omit({ createdAt: true }).parse(rest);
+      const productData: any = { ...input };
+      if (createdAt) {
+        productData.createdAt = new Date(createdAt);
+      }
+      const product = await storage.createProduct(productData, userId);
       res.status(201).json(product);
     } catch (err) {
       if (err instanceof z.ZodError) {

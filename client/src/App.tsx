@@ -135,7 +135,7 @@ function AppLayout() {
             <SidebarTrigger data-testid="button-sidebar-toggle" />
           </header>
           <main className="flex-1 overflow-auto">
-            <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div className="container mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
               <Switch>
                 <Route path="/" component={Dashboard} />
                 <Route path="/produtos" component={Products} />
