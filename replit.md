@@ -4,6 +4,9 @@
 Financial management dashboard for businesses. Multi-user system with role-based permissions (Admin/Operator). Built with React + Express + PostgreSQL. All UI in Portuguese.
 
 ## Recent Changes
+- 2026-02-08: Added email button (envelope icon) to Dashboard and TeamManagement for sending reports via email
+- 2026-02-08: Email opens mailto: draft with full financial summary or employee list in the message body
+- 2026-02-08: Removed 'Salario Medio' card from TeamManagement, kept only 'Total de Funcionarios' and 'Folha Mensal'
 - 2026-02-08: Standardized date+time (dd/MM/yyyy HH:mm) display across all tables (Dashboard, Team, Products)
 - 2026-02-08: Added 'Data de Admissao' field to employee creation form (datetime-local input)
 - 2026-02-08: Employee tables now show admission date+time in both desktop and mobile views
