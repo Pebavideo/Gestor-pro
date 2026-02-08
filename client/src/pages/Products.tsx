@@ -11,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Package, Pencil, Trash2, PackageOpen, ShoppingBag, Clock } from "lucide-react";
+import { Plus, Package, Pencil, Trash2, PackageOpen, ShoppingBag, Clock, ArrowDownCircle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CurrencyInput, parseBRL, centsToFormatted } from "@/components/CurrencyInput";
@@ -33,6 +33,8 @@ export default function Products() {
 
   const [showCreate, setShowCreate] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
+  const [showExpenseDialog, setShowExpenseDialog] = useState(false);
+  const [pendingExpense, setPendingExpense] = useState<{ name: string; quantity: number; priceCents: number } | null>(null);
 
   const [formName, setFormName] = useState("");
   const [formQuantity, setFormQuantity] = useState("");
@@ -51,16 +53,48 @@ export default function Products() {
         const err = await res.json();
         throw new Error(err.message || "Erro ao criar produto");
       }
-      return res.json();
+      return { product: await res.json(), input: data };
     },
-    onSuccess: () => {
+    onSuccess: ({ input }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       toast({ title: "Produto cadastrado", description: "O produto foi adicionado com sucesso." });
+      const totalCents = input.quantity * input.price;
+      if (totalCents > 0 && input.quantity > 0) {
+        setPendingExpense({ name: input.name, quantity: input.quantity, priceCents: input.price });
+        setShowExpenseDialog(true);
+      }
       resetForm();
       setShowCreate(false);
     },
     onError: (err: Error) => {
       toast({ title: "Erro", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const createExpenseMutation = useMutation({
+    mutationFn: async (data: { description: string; amount: number; type: string }) => {
+      const res = await fetch("/api/transactions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.message || "Erro ao lancar despesa");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
+      toast({ title: "Despesa lancada", description: "A compra foi registrada como saida no financeiro." });
+      setPendingExpense(null);
+      setShowExpenseDialog(false);
+    },
+    onError: (err: Error) => {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+      setPendingExpense(null);
+      setShowExpenseDialog(false);
     },
   });
 
@@ -420,6 +454,68 @@ export default function Products() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={showExpenseDialog} onOpenChange={(open) => { if (!open) { setShowExpenseDialog(false); setPendingExpense(null); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <ArrowDownCircle className="h-5 w-5 text-rose-500" />
+              Lancar Despesa no Financeiro?
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3">
+                <p>Deseja registrar esta compra como uma Saida no seu Painel Financeiro?</p>
+                {pendingExpense && (
+                  <div className="rounded-lg bg-muted p-3 space-y-1">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-sm text-muted-foreground">Produto:</span>
+                      <span className="font-medium text-foreground">{pendingExpense.name}</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-sm text-muted-foreground">Quantidade:</span>
+                      <span className="font-medium text-foreground">{pendingExpense.quantity} un.</span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-sm text-muted-foreground">Preco unitario:</span>
+                      <span className="font-medium text-foreground">{formatCurrency(pendingExpense.priceCents / 100)}</span>
+                    </div>
+                    <div className="border-t border-border/50 pt-1 mt-1 flex items-center justify-between gap-2 flex-wrap">
+                      <span className="text-sm font-semibold text-foreground">Valor total da compra:</span>
+                      <span className="font-bold text-lg text-rose-600 dark:text-rose-400">
+                        {formatCurrency((pendingExpense.quantity * pendingExpense.priceCents) / 100)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => { setPendingExpense(null); setShowExpenseDialog(false); }}
+              data-testid="button-cancel-expense"
+            >
+              Nao, apenas cadastrar o produto
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingExpense) {
+                  const totalCents = pendingExpense.quantity * pendingExpense.priceCents;
+                  createExpenseMutation.mutate({
+                    description: `Compra de produto - ${pendingExpense.name} (${pendingExpense.quantity} un.)`,
+                    amount: totalCents,
+                    type: "expense",
+                  });
+                }
+              }}
+              disabled={createExpenseMutation.isPending}
+              data-testid="button-confirm-expense"
+            >
+              {createExpenseMutation.isPending ? "Lancando..." : "Sim, lancar como Saida"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

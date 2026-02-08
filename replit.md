@@ -4,6 +4,7 @@
 Financial management dashboard for businesses. Multi-user system with role-based permissions (Admin/Operator). Built with React + Express + PostgreSQL. All UI in Portuguese.
 
 ## Recent Changes
+- 2026-02-08: Product creation now asks to auto-launch expense transaction in financial dashboard (quantity × price)
 - 2026-02-08: PDF export for Dashboard (financial report) and TeamManagement (team report) using jsPDF
 - 2026-02-08: WhatsApp share button on transactions and employee payments (generates formatted message via wa.me)
 - 2026-02-08: Print button for Dashboard and TeamManagement tables (opens print-friendly window)
