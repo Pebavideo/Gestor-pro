@@ -7,11 +7,23 @@ import { useAuth } from "@/hooks/use-auth";
 import { StatsCard } from "@/components/StatsCard";
 import { CreateTransactionDialog } from "@/components/CreateTransactionDialog";
 import { TransactionTable } from "@/components/TransactionTable";
-import { TrendingUp, TrendingDown, Landmark, Wallet, CalendarDays, FileDown, Printer, Mail, Upload } from "lucide-react";
+import { TrendingUp, TrendingDown, Landmark, Wallet, CalendarDays, FileDown, Printer, Mail, Upload, Trash2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { generateDashboardPDF, printTable, openEmailDashboard } from "@/lib/pdf-generator";
 import { useToast } from "@/hooks/use-toast";
+import { CATEGORY_OPTIONS, getCategoryLabel } from "@shared/schema";
+
+interface CSVPreviewRow {
+  description: string;
+  amount: number;
+  type: "income" | "expense";
+  date: string;
+  category: string;
+}
 
 const MONTH_NAMES = [
   "Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho",
@@ -25,6 +37,8 @@ export default function Dashboard() {
   const importCSV = useImportCSV();
   const { toast } = useToast();
   const csvInputRef = useRef<HTMLInputElement>(null);
+  const [csvPreview, setCsvPreview] = useState<CSVPreviewRow[] | null>(null);
+  const [csvPreviewOpen, setCsvPreviewOpen] = useState(false);
 
   const [selectedYear, setSelectedYear] = useState<string>("all");
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
@@ -125,21 +139,106 @@ export default function Dashboard() {
           return;
         }
         const headers = lines[0].split(/[;,]/).map((h) => h.trim().toLowerCase().replace(/"/g, ""));
-        const rows: any[] = [];
+        const parsedRows: CSVPreviewRow[] = [];
         for (let i = 1; i < lines.length; i++) {
           const values = lines[i].split(/[;,]/).map((v) => v.trim().replace(/"/g, ""));
           if (values.length < 2) continue;
           const row: any = {};
           headers.forEach((h, idx) => { row[h] = values[idx] || ""; });
-          rows.push(row);
+
+          const description = String(row.description || row.descricao || row.historico || "Importacao CSV").trim();
+          let rawAmount = row.amount || row.valor || row.value || "0";
+          if (typeof rawAmount === "string") {
+            rawAmount = rawAmount.replace(/[R$\s]/g, "").replace(/\./g, "").replace(",", ".");
+          }
+          const amount = Math.abs(Math.round(parseFloat(rawAmount) * 100));
+          if (isNaN(amount) || amount === 0) continue;
+
+          let type: "income" | "expense" = "expense";
+          if (row.type === "income" || row.tipo === "entrada" || row.tipo === "receita") {
+            type = "income";
+          }
+          if (row.type === "expense" || row.tipo === "saida" || row.tipo === "despesa") {
+            type = "expense";
+          }
+          if (!row.type && !row.tipo && parseFloat(String(row.amount || row.valor || row.value || "0").replace(/[R$\s.]/g, "").replace(",", ".")) > 0) {
+            type = "income";
+          }
+
+          let dateStr = "";
+          if (row.date || row.data) {
+            const rawDate = String(row.date || row.data);
+            const parts = rawDate.split("/");
+            if (parts.length === 3) {
+              dateStr = `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+            } else {
+              dateStr = rawDate;
+            }
+          }
+          if (!dateStr) {
+            dateStr = format(new Date(), "yyyy-MM-dd");
+          }
+
+          const category = row.category || row.categoria || "outros";
+
+          parsedRows.push({ description, amount, type, date: dateStr, category });
         }
-        importCSV.mutate(rows);
+
+        if (parsedRows.length === 0) {
+          toast({ title: "Sem dados", description: "Nenhuma transacao valida encontrada no arquivo.", variant: "destructive" });
+          return;
+        }
+
+        setCsvPreview(parsedRows);
+        setCsvPreviewOpen(true);
       } catch {
         toast({ title: "Erro", description: "Nao foi possivel ler o arquivo CSV.", variant: "destructive" });
       }
     };
     reader.readAsText(file);
     e.target.value = "";
+  }
+
+  function handleConfirmCSVImport() {
+    if (!csvPreview || csvPreview.length === 0) return;
+    const rows = csvPreview.map((r) => ({
+      description: r.description,
+      amount_cents: r.amount,
+      type: r.type,
+      date: r.date,
+      category: r.category !== "none" ? r.category : undefined,
+    }));
+    importCSV.mutate(rows, {
+      onSuccess: () => {
+        setCsvPreviewOpen(false);
+        setCsvPreview(null);
+      },
+    });
+  }
+
+  function removeCSVRow(index: number) {
+    if (!csvPreview) return;
+    const updated = csvPreview.filter((_, i) => i !== index);
+    if (updated.length === 0) {
+      setCsvPreviewOpen(false);
+      setCsvPreview(null);
+    } else {
+      setCsvPreview(updated);
+    }
+  }
+
+  function updateCSVRowCategory(index: number, category: string) {
+    if (!csvPreview) return;
+    const updated = [...csvPreview];
+    updated[index] = { ...updated[index], category };
+    setCsvPreview(updated);
+  }
+
+  function updateCSVRowType(index: number, type: "income" | "expense") {
+    if (!csvPreview) return;
+    const updated = [...csvPreview];
+    updated[index] = { ...updated[index], type };
+    setCsvPreview(updated);
   }
 
   return (
@@ -283,6 +382,125 @@ export default function Dashboard() {
         </div>
         <TransactionTable monthFilter={monthFilter} />
       </div>
+
+      <Dialog open={csvPreviewOpen} onOpenChange={(open) => { if (!open) { setCsvPreviewOpen(false); setCsvPreview(null); } }}>
+        <DialogContent className="sm:max-w-[700px]">
+          <DialogHeader>
+            <DialogTitle>Revisar Importacao CSV</DialogTitle>
+            <DialogDescription>
+              {csvPreview?.length || 0} transacao(es) encontrada(s). Revise, altere categorias/tipo e confirme.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[400px] overflow-y-auto">
+            {csvPreview && csvPreview.length > 0 && (
+              <div className="hidden sm:block">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Descricao</TableHead>
+                      <TableHead>Data</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Categoria</TableHead>
+                      <TableHead className="text-right">Valor</TableHead>
+                      <TableHead className="w-[40px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {csvPreview.map((row, idx) => (
+                      <TableRow key={idx} data-testid={`csv-preview-row-${idx}`}>
+                        <TableCell className="text-sm max-w-[160px] truncate">{row.description}</TableCell>
+                        <TableCell className="font-mono text-xs">{row.date}</TableCell>
+                        <TableCell>
+                          <Select value={row.type} onValueChange={(v) => updateCSVRowType(idx, v as "income" | "expense")}>
+                            <SelectTrigger className="w-[100px]" data-testid={`csv-select-type-${idx}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="income">Entrada</SelectItem>
+                              <SelectItem value="expense">Saida</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell>
+                          <Select value={row.category} onValueChange={(v) => updateCSVRowCategory(idx, v)}>
+                            <SelectTrigger className="w-[120px]" data-testid={`csv-select-category-${idx}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">Nenhuma</SelectItem>
+                              {CATEGORY_OPTIONS.map((opt) => (
+                                <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
+                        <TableCell className={`text-right font-mono font-medium ${row.type === "income" ? "text-emerald-600" : "text-rose-600"}`}>
+                          {row.type === "income" ? "+" : "-"}{formatCurrency(row.amount / 100)}
+                        </TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="icon" onClick={() => removeCSVRow(idx)} data-testid={`csv-remove-row-${idx}`}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+            {csvPreview && csvPreview.length > 0 && (
+              <div className="sm:hidden space-y-3">
+                {csvPreview.map((row, idx) => (
+                  <div key={idx} className="border rounded-lg p-3 space-y-2" data-testid={`csv-preview-card-${idx}`}>
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-medium truncate">{row.description}</span>
+                      <Button variant="ghost" size="icon" onClick={() => removeCSVRow(idx)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-xs font-mono text-muted-foreground">{row.date}</span>
+                      <span className={`font-mono font-medium text-sm ${row.type === "income" ? "text-emerald-600" : "text-rose-600"}`}>
+                        {row.type === "income" ? "+" : "-"}{formatCurrency(row.amount / 100)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Select value={row.type} onValueChange={(v) => updateCSVRowType(idx, v as "income" | "expense")}>
+                        <SelectTrigger className="w-[100px]">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="income">Entrada</SelectItem>
+                          <SelectItem value="expense">Saida</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Select value={row.category} onValueChange={(v) => updateCSVRowCategory(idx, v)}>
+                        <SelectTrigger className="flex-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Nenhuma</SelectItem>
+                          {CATEGORY_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setCsvPreviewOpen(false); setCsvPreview(null); }} data-testid="button-cancel-csv-import">
+              Cancelar
+            </Button>
+            <Button onClick={handleConfirmCSVImport} disabled={importCSV.isPending} data-testid="button-confirm-csv-import">
+              {importCSV.isPending ? "Importando..." : `Importar ${csvPreview?.length || 0} Transacao(es)`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <div id="printable-transactions" className="hidden">
         <table>

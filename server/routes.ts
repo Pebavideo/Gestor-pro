@@ -113,22 +113,23 @@ export async function registerRoutes(
       const created: any[] = [];
       for (const row of rows) {
         const description = String(row.description || row.descricao || row.historico || "Importacao CSV").trim();
-        let rawAmount = row.amount || row.valor || row.value || "0";
-        if (typeof rawAmount === "string") {
-          rawAmount = rawAmount.replace(/[R$\s]/g, "").replace(/\./g, "").replace(",", ".");
+
+        let amount: number;
+        if (row.amount_cents !== undefined && row.amount_cents !== null) {
+          amount = Math.abs(Math.round(Number(row.amount_cents)));
+        } else {
+          let rawAmount = row.amount || row.valor || row.value || "0";
+          if (typeof rawAmount === "string") {
+            rawAmount = rawAmount.replace(/[R$\s]/g, "").replace(/\./g, "").replace(",", ".");
+          }
+          amount = Math.abs(Math.round(parseFloat(rawAmount) * 100));
         }
-        const amount = Math.abs(Math.round(parseFloat(rawAmount) * 100));
         if (isNaN(amount) || amount === 0) continue;
 
         let type = "expense";
-        if (row.type === "income" || row.tipo === "entrada" || row.tipo === "receita" ||
-            (typeof rawAmount === "string" && !rawAmount.startsWith("-")) ||
-            parseFloat(String(row.amount || row.valor || row.value || "0").replace(/[R$\s.]/g, "").replace(",", ".")) > 0) {
-          if (row.type === "income" || row.tipo === "entrada" || row.tipo === "receita") {
-            type = "income";
-          }
-        }
-        if (row.type === "expense" || row.tipo === "saida" || row.tipo === "despesa") {
+        if (row.type === "income" || row.tipo === "entrada" || row.tipo === "receita") {
+          type = "income";
+        } else if (row.type === "expense" || row.tipo === "saida" || row.tipo === "despesa") {
           type = "expense";
         }
 
@@ -144,9 +145,11 @@ export async function registerRoutes(
           }
         }
 
+        const category = row.category || row.categoria || null;
+
         const [tx] = await (await import("./db")).db
           .insert((await import("@shared/schema")).transactions)
-          .values({ description, amount, type, userId, date: dateVal })
+          .values({ description, amount, type, category, userId, date: dateVal })
           .returning();
         created.push(tx);
       }

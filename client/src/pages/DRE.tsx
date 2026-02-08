@@ -1,20 +1,25 @@
 import { useState, useMemo } from "react";
-import { format } from "date-fns";
+import { format, startOfMonth, endOfMonth, startOfQuarter, endOfQuarter, startOfYear, endOfYear } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useTransactions, formatCurrency } from "@/hooks/use-transactions";
 import { useSettings } from "@/hooks/use-transactions";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CalendarDays, FileDown, Mail, TrendingUp, TrendingDown, ArrowDown, ArrowUp, Store } from "lucide-react";
 import { generateDREPDF, openEmailDRE } from "@/lib/pdf-generator";
 import { STORE_OPTIONS, getStoreLabel } from "@/components/CreateTransactionDialog";
+import { getCategoryLabel } from "@shared/schema";
 
 const MONTH_NAMES = [
   "Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho",
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
 ];
+
+type PeriodMode = "monthly" | "quarterly" | "annual" | "custom";
 
 interface DRELine {
   label: string;
@@ -29,125 +34,158 @@ export default function DRE() {
   const { data: transactions, isLoading: txLoading } = useTransactions();
   const { data: settingsData, isLoading: settingsLoading } = useSettings();
 
-  const [selectedYear, setSelectedYear] = useState<string>("all");
-  const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [periodMode, setPeriodMode] = useState<PeriodMode>("monthly");
+  const [selectedYear, setSelectedYear] = useState<string>(String(new Date().getFullYear()));
+  const [selectedMonth, setSelectedMonth] = useState<string>(String(new Date().getMonth()));
+  const [selectedQuarter, setSelectedQuarter] = useState<string>("1");
+  const [customFrom, setCustomFrom] = useState<string>("");
+  const [customTo, setCustomTo] = useState<string>("");
   const [selectedStore, setSelectedStore] = useState<string>("all");
 
   const availableYears = useMemo(() => {
-    if (!transactions) return [];
+    if (!transactions) return [new Date().getFullYear()];
     const years = new Set<number>();
     for (const tx of transactions) {
       years.add(new Date(tx.date).getFullYear());
     }
+    if (years.size === 0) years.add(new Date().getFullYear());
     return Array.from(years).sort((a, b) => b - a);
   }, [transactions]);
 
-  const availableMonthsForYear = useMemo(() => {
-    if (!transactions || selectedYear === "all") return [];
+  const { dateFrom, dateTo, filterLabel } = useMemo(() => {
     const year = parseInt(selectedYear);
-    const months = new Set<number>();
-    for (const tx of transactions) {
-      const d = new Date(tx.date);
-      if (d.getFullYear() === year) months.add(d.getMonth());
+    let from: Date;
+    let to: Date;
+    let label: string;
+
+    switch (periodMode) {
+      case "monthly": {
+        const month = parseInt(selectedMonth);
+        const ref = new Date(year, month, 1);
+        from = startOfMonth(ref);
+        to = endOfMonth(ref);
+        label = `${MONTH_NAMES[month]} ${year}`;
+        break;
+      }
+      case "quarterly": {
+        const q = parseInt(selectedQuarter);
+        const qMonth = (q - 1) * 3;
+        const ref = new Date(year, qMonth, 1);
+        from = startOfQuarter(ref);
+        to = endOfQuarter(ref);
+        label = `${q}o Trimestre ${year}`;
+        break;
+      }
+      case "annual": {
+        const ref = new Date(year, 0, 1);
+        from = startOfYear(ref);
+        to = endOfYear(ref);
+        label = `Ano ${year}`;
+        break;
+      }
+      case "custom": {
+        from = customFrom ? new Date(customFrom + "T00:00:00") : new Date(year, 0, 1);
+        to = customTo ? new Date(customTo + "T23:59:59") : new Date();
+        label = `${format(from, "dd/MM/yyyy")} a ${format(to, "dd/MM/yyyy")}`;
+        break;
+      }
     }
-    return Array.from(months).sort((a, b) => a - b);
-  }, [transactions, selectedYear]);
 
-  const monthFilter = useMemo(() => {
-    if (selectedYear === "all") return null;
-    if (selectedMonth === "all") return { year: parseInt(selectedYear), month: null };
-    return { year: parseInt(selectedYear), month: parseInt(selectedMonth) };
-  }, [selectedYear, selectedMonth]);
-
-  function handleYearChange(value: string) {
-    setSelectedYear(value);
-    setSelectedMonth("all");
-  }
+    return { dateFrom: from, dateTo: to, filterLabel: label };
+  }, [periodMode, selectedYear, selectedMonth, selectedQuarter, customFrom, customTo]);
 
   const storeLabel = selectedStore !== "all" ? getStoreLabel(selectedStore) : null;
-
-  const filterLabel = monthFilter
-    ? monthFilter.month !== null
-      ? `${MONTH_NAMES[monthFilter.month]} ${monthFilter.year}`
-      : `${monthFilter.year}`
-    : "Todos os periodos";
 
   const filteredTransactions = useMemo(() => {
     if (!transactions) return [];
     return transactions.filter((tx) => {
-      if (monthFilter) {
-        const d = new Date(tx.date);
-        if (d.getFullYear() !== monthFilter.year) return false;
-        if (monthFilter.month !== null && d.getMonth() !== monthFilter.month) return false;
-      }
+      const d = new Date(tx.date);
+      if (d < dateFrom || d > dateTo) return false;
       if (selectedStore !== "all" && tx.store !== selectedStore) return false;
       return true;
     });
-  }, [transactions, monthFilter, selectedStore]);
+  }, [transactions, dateFrom, dateTo, selectedStore]);
 
   const dreData = useMemo(() => {
     const taxRate = settingsData ? parseFloat(settingsData.taxRate) || 0 : 0;
 
     let receitaBruta = 0;
-    let cpv = 0;
-    let despesasSalarios = 0;
-    let despesasOutras = 0;
+    const receitaByCategory: Record<string, number> = {};
+    const despesaByCategory: Record<string, number> = {};
 
     for (const tx of filteredTransactions) {
+      const cat = tx.category || "outros";
       if (tx.type === "income") {
         receitaBruta += tx.amount;
+        receitaByCategory[cat] = (receitaByCategory[cat] || 0) + tx.amount;
       } else {
-        const descLower = tx.description.toLowerCase();
-        if (descLower.startsWith("pagamento ") || descLower.includes("salario") || descLower.includes("folha")) {
-          despesasSalarios += tx.amount;
-        } else if (descLower.includes("produto") || descLower.includes("estoque") || descLower.includes("compra") || descLower.includes("mercadoria")) {
-          cpv += tx.amount;
-        } else {
-          despesasOutras += tx.amount;
-        }
+        despesaByCategory[cat] = (despesaByCategory[cat] || 0) + tx.amount;
       }
     }
 
+    const totalDespesas = Object.values(despesaByCategory).reduce((s, v) => s + v, 0);
     const impostos = Math.round(receitaBruta * (taxRate / 100));
     const receitaLiquida = receitaBruta - impostos;
-    const lucroBruto = receitaLiquida - cpv;
-    const totalDespesasOp = despesasSalarios + despesasOutras;
-    const lucroLiquido = lucroBruto - totalDespesasOp;
+    const lucroLiquido = receitaLiquida - totalDespesas;
 
     return {
       receitaBruta,
+      receitaByCategory,
       impostos,
       receitaLiquida,
-      cpv,
-      lucroBruto,
-      despesasSalarios,
-      despesasOutras,
-      totalDespesasOp,
+      despesaByCategory,
+      totalDespesas,
       lucroLiquido,
       taxRate,
     };
   }, [filteredTransactions, settingsData]);
 
-  const dreLines: DRELine[] = [
-    { label: "Receita Bruta de Vendas", value: dreData.receitaBruta, level: 0, isBold: true, color: "positive" },
-    { label: `(-) Impostos sobre Receita (${dreData.taxRate}%)`, value: -dreData.impostos, level: 1, color: "negative" },
-    { label: "(=) Receita Liquida", value: dreData.receitaLiquida, level: 0, isBold: true, isTotal: true, color: dreData.receitaLiquida >= 0 ? "positive" : "negative" },
-    { label: "(-) Custo dos Produtos Vendidos (CPV)", value: -dreData.cpv, level: 1, color: "negative" },
-    { label: "(=) Lucro Bruto", value: dreData.lucroBruto, level: 0, isBold: true, isTotal: true, color: dreData.lucroBruto >= 0 ? "positive" : "negative" },
-    { label: "(-) Despesas Operacionais", value: -dreData.totalDespesasOp, level: 1, isBold: true, color: "negative" },
-    { label: "Salarios e Encargos", value: -dreData.despesasSalarios, level: 2, color: "neutral" },
-    { label: "Outras Despesas Operacionais", value: -dreData.despesasOutras, level: 2, color: "neutral" },
-    { label: "(=) Lucro Liquido do Exercicio", value: dreData.lucroLiquido, level: 0, isBold: true, isTotal: true, color: dreData.lucroLiquido >= 0 ? "positive" : "negative" },
-  ];
+  const dreLines: DRELine[] = useMemo(() => {
+    const lines: DRELine[] = [];
+
+    lines.push({ label: "Receita Bruta de Vendas", value: dreData.receitaBruta, level: 0, isBold: true, color: "positive" });
+
+    const receitaCats = Object.entries(dreData.receitaByCategory).sort((a, b) => b[1] - a[1]);
+    for (const [cat, val] of receitaCats) {
+      lines.push({ label: getCategoryLabel(cat) || "Outros", value: val, level: 2, color: "neutral" });
+    }
+
+    lines.push({ label: `(-) Impostos sobre Receita (${dreData.taxRate}%)`, value: -dreData.impostos, level: 1, color: "negative" });
+    lines.push({ label: "(=) Receita Liquida", value: dreData.receitaLiquida, level: 0, isBold: true, isTotal: true, color: dreData.receitaLiquida >= 0 ? "positive" : "negative" });
+
+    lines.push({ label: "(-) Despesas Totais", value: -dreData.totalDespesas, level: 0, isBold: true, color: "negative" });
+
+    const despesaCats = Object.entries(dreData.despesaByCategory).sort((a, b) => b[1] - a[1]);
+    for (const [cat, val] of despesaCats) {
+      lines.push({ label: getCategoryLabel(cat) || "Outros", value: -val, level: 2, color: "neutral" });
+    }
+
+    lines.push({ label: "(=) Lucro Liquido do Exercicio", value: dreData.lucroLiquido, level: 0, isBold: true, isTotal: true, color: dreData.lucroLiquido >= 0 ? "positive" : "negative" });
+
+    return lines;
+  }, [dreData]);
 
   const isLoading = txLoading || settingsLoading;
 
+  const dreExportData = {
+    receitaBruta: dreData.receitaBruta,
+    impostos: dreData.impostos,
+    receitaLiquida: dreData.receitaLiquida,
+    cpv: 0,
+    lucroBruto: dreData.receitaLiquida,
+    despesasSalarios: 0,
+    despesasOutras: dreData.totalDespesas,
+    totalDespesasOp: dreData.totalDespesas,
+    lucroLiquido: dreData.lucroLiquido,
+    taxRate: dreData.taxRate,
+  };
+
   function handleExportPDF() {
-    generateDREPDF(dreLines, filterLabel, dreData, storeLabel);
+    generateDREPDF(dreLines, filterLabel, dreExportData, storeLabel);
   }
 
   function handleEmail() {
-    openEmailDRE(dreLines, filterLabel, dreData, storeLabel);
+    openEmailDRE(dreLines, filterLabel, dreExportData, storeLabel);
   }
 
   return (
@@ -157,54 +195,9 @@ export default function DRE() {
           <h2 className="text-2xl font-bold tracking-tight" data-testid="text-dre-title">
             DRE - Demonstrativo de Resultados
           </h2>
-          <p className="text-muted-foreground mt-1">Demonstracao do Resultado do Exercicio simplificada.</p>
+          <p className="text-muted-foreground mt-1">Demonstracao do Resultado do Exercicio por categorias.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-2 flex-wrap">
-            <CalendarDays className="h-4 w-4 text-muted-foreground" />
-            <Select value={selectedYear} onValueChange={handleYearChange}>
-              <SelectTrigger className="w-[120px]" data-testid="dre-select-year">
-                <SelectValue placeholder="Ano" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" data-testid="dre-option-year-all">Todos</SelectItem>
-                {availableYears.map((y) => (
-                  <SelectItem key={y} value={String(y)} data-testid={`dre-option-year-${y}`}>
-                    {y}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selectedYear !== "all" && (
-              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-                <SelectTrigger className="w-[140px]" data-testid="dre-select-month">
-                  <SelectValue placeholder="Mes" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all" data-testid="dre-option-month-all">Todos os meses</SelectItem>
-                  {availableMonthsForYear.map((m) => (
-                    <SelectItem key={m} value={String(m)} data-testid={`dre-option-month-${m}`}>
-                      {MONTH_NAMES[m]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-            <Store className="h-4 w-4 text-muted-foreground ml-1" />
-            <Select value={selectedStore} onValueChange={setSelectedStore}>
-              <SelectTrigger className="w-[160px]" data-testid="dre-select-store">
-                <SelectValue placeholder="Loja" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all" data-testid="dre-option-store-all">Todas as lojas</SelectItem>
-                {STORE_OPTIONS.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value} data-testid={`dre-option-store-${opt.value}`}>
-                    {opt.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
           <Button
             variant="outline"
             size="icon"
@@ -228,6 +221,111 @@ export default function DRE() {
         </div>
       </div>
 
+      <Card className="p-4">
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <CalendarDays className="h-4 w-4 text-muted-foreground shrink-0" />
+            <Select value={periodMode} onValueChange={(v) => setPeriodMode(v as PeriodMode)}>
+              <SelectTrigger className="w-[140px]" data-testid="dre-select-period-mode">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="monthly">Mensal</SelectItem>
+                <SelectItem value="quarterly">Trimestral</SelectItem>
+                <SelectItem value="annual">Anual</SelectItem>
+                <SelectItem value="custom">Personalizado</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {periodMode !== "custom" && (
+              <Select value={selectedYear} onValueChange={setSelectedYear}>
+                <SelectTrigger className="w-[100px]" data-testid="dre-select-year">
+                  <SelectValue placeholder="Ano" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableYears.map((y) => (
+                    <SelectItem key={y} value={String(y)} data-testid={`dre-option-year-${y}`}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {periodMode === "monthly" && (
+              <Select value={selectedMonth} onValueChange={setSelectedMonth}>
+                <SelectTrigger className="w-[130px]" data-testid="dre-select-month">
+                  <SelectValue placeholder="Mes" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTH_NAMES.map((m, idx) => (
+                    <SelectItem key={idx} value={String(idx)} data-testid={`dre-option-month-${idx}`}>
+                      {m}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+
+            {periodMode === "quarterly" && (
+              <Select value={selectedQuarter} onValueChange={setSelectedQuarter}>
+                <SelectTrigger className="w-[140px]" data-testid="dre-select-quarter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1o Trimestre</SelectItem>
+                  <SelectItem value="2">2o Trimestre</SelectItem>
+                  <SelectItem value="3">3o Trimestre</SelectItem>
+                  <SelectItem value="4">4o Trimestre</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+
+            {periodMode === "custom" && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center gap-1">
+                  <Label className="text-xs text-muted-foreground shrink-0">De:</Label>
+                  <Input
+                    type="date"
+                    value={customFrom}
+                    onChange={(e) => setCustomFrom(e.target.value)}
+                    className="w-[140px]"
+                    data-testid="dre-input-date-from"
+                  />
+                </div>
+                <div className="flex items-center gap-1">
+                  <Label className="text-xs text-muted-foreground shrink-0">Ate:</Label>
+                  <Input
+                    type="date"
+                    value={customTo}
+                    onChange={(e) => setCustomTo(e.target.value)}
+                    className="w-[140px]"
+                    data-testid="dre-input-date-to"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center gap-1 ml-auto">
+              <Store className="h-4 w-4 text-muted-foreground" />
+              <Select value={selectedStore} onValueChange={setSelectedStore}>
+                <SelectTrigger className="w-[150px]" data-testid="dre-select-store">
+                  <SelectValue placeholder="Loja" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all" data-testid="dre-option-store-all">Todas as lojas</SelectItem>
+                  {STORE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value} data-testid={`dre-option-store-${opt.value}`}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+      </Card>
+
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="p-4">
           <div className="flex items-center gap-3">
@@ -250,7 +348,7 @@ export default function DRE() {
             <div>
               <p className="text-sm text-muted-foreground">Despesas Totais</p>
               <p className="text-lg font-bold text-rose-600" data-testid="dre-despesas-totais">
-                {isLoading ? "..." : formatCurrency((dreData.cpv + dreData.totalDespesasOp + dreData.impostos) / 100)}
+                {isLoading ? "..." : formatCurrency((dreData.totalDespesas + dreData.impostos) / 100)}
               </p>
             </div>
           </div>

@@ -4,11 +4,33 @@ import { z } from "zod";
 
 export * from "./models/auth";
 
+export const CATEGORY_OPTIONS = [
+  { value: "alimentacao", label: "Alimentacao" },
+  { value: "impostos", label: "Impostos" },
+  { value: "salarios", label: "Salarios" },
+  { value: "vendas", label: "Vendas" },
+  { value: "servicos", label: "Servicos" },
+  { value: "investimentos", label: "Investimentos" },
+  { value: "transporte", label: "Transporte" },
+  { value: "aluguel", label: "Aluguel" },
+  { value: "materiais", label: "Materiais" },
+  { value: "manutencao", label: "Manutencao" },
+  { value: "marketing", label: "Marketing" },
+  { value: "outros", label: "Outros" },
+] as const;
+
+export function getCategoryLabel(value: string | null | undefined): string {
+  if (!value) return "";
+  const found = CATEGORY_OPTIONS.find((o) => o.value === value);
+  return found ? found.label : value;
+}
+
 export const transactions = pgTable("transactions", {
   id: serial("id").primaryKey(),
   description: text("description").notNull(),
   amount: integer("amount").notNull(),
   type: text("type").notNull(),
+  category: text("category"),
   store: text("store"),
   userId: varchar("user_id").notNull(),
   date: timestamp("date").defaultNow().notNull(),
@@ -73,6 +95,7 @@ export const insertTransactionSchema = createInsertSchema(transactions).pick({
   description: true,
   amount: true,
   type: true,
+  category: true,
   store: true,
 });
 

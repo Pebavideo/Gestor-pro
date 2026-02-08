@@ -4,6 +4,14 @@
 Financial management dashboard for businesses. Multi-user system with role-based permissions (Admin/Operator). Built with React + Express + PostgreSQL. All UI in Portuguese.
 
 ## Recent Changes
+- 2026-02-08: Added 'category' field to transactions (Alimentacao, Impostos, Salarios, Vendas, Servicos, Investimentos, Transporte, Aluguel, Materiais, Manutencao, Marketing, Outros)
+- 2026-02-08: Category selectable in create/edit transaction dialogs, displayed as badge in tables
+- 2026-02-08: DRE now groups receitas and despesas by category with breakdown
+- 2026-02-08: DRE flexible period filters: Mensal, Trimestral, Anual, Personalizado (custom date range)
+- 2026-02-08: CSV import now shows preview dialog with editable type/category before confirming import
+- 2026-02-08: CSV import preview allows removing individual rows before import
+- 2026-02-08: Payroll transactions auto-categorized as 'salarios'
+- 2026-02-08: CATEGORY_OPTIONS and getCategoryLabel exported from shared/schema.ts for reuse
 - 2026-02-08: Added DRE (Demonstrativo de Resultados) page with income statement: Receita Bruta, Impostos, CPV, Despesas Operacionais, Lucro Liquido
 - 2026-02-08: DRE with color-coded lines (green for positive, red for negative/loss), year/month filters, PDF export and email
 - 2026-02-08: Bank reconciliation: toggle transactions as 'Conciliada' with checkmark icon in transaction table
@@ -47,7 +55,7 @@ Financial management dashboard for businesses. Multi-user system with role-based
 
 ### Key Tables
 - `users`: id (varchar UUID), email (unique), firstName, lastName, passwordHash, emailVerified, verificationCode, verificationCodeExpiresAt, role ('admin'|'operator'), createdAt, updatedAt
-- `transactions`: id (serial), description, amount (cents), type, userId, date, reconciled (0/1)
+- `transactions`: id (serial), description, amount (cents), type, category (nullable), store (nullable), userId, date, reconciled (0/1)
 - `employees`: id (serial), name, position, salary (cents), userId, active (1/0), createdAt
 - `products`: id (serial), name, specification (text, nullable), unit (text, default 'UN'), quantity, price (cents), userId, active (1/0), createdAt
 - `settings`: id (serial), userId (unique), taxRate

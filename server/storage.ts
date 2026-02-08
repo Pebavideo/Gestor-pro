@@ -179,6 +179,7 @@ export class DatabaseStorage implements IStorage {
           description: this.getPaymentDescription(emp.name, emp.salaryType),
           amount: emp.salary,
           type: "expense",
+          category: "salarios",
           userId,
         })
         .returning();
@@ -197,6 +198,7 @@ export class DatabaseStorage implements IStorage {
         description: this.getPaymentDescription(emp.name, emp.salaryType),
         amount: emp.salary,
         type: "expense",
+        category: "salarios",
         userId,
       })
       .returning();

@@ -13,6 +13,7 @@ import { CurrencyInput, parseBRL, centsToFormatted } from "@/components/Currency
 import { Trash2, ArrowUpRight, ArrowDownRight, Inbox, Pencil, Share2, CheckCircle2, Circle } from "lucide-react";
 import { generateWhatsAppMessage, openWhatsApp } from "@/lib/pdf-generator";
 import { STORE_OPTIONS, getStoreLabel } from "@/components/CreateTransactionDialog";
+import { CATEGORY_OPTIONS, getCategoryLabel } from "@shared/schema";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Card } from "@/components/ui/card";
@@ -29,12 +30,14 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
   const [editDescription, setEditDescription] = useState("");
   const [editAmount, setEditAmount] = useState("");
   const [editStore, setEditStore] = useState("none");
+  const [editCategory, setEditCategory] = useState("none");
 
   const openEdit = (tx: Transaction) => {
     setEditTx(tx);
     setEditDescription(tx.description);
     setEditAmount(centsToFormatted(tx.amount));
     setEditStore(tx.store || "none");
+    setEditCategory(tx.category || "none");
   };
 
   const submitEdit = () => {
@@ -42,8 +45,9 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
     const amountCents = Math.round(parseBRL(editAmount) * 100);
     if (isNaN(amountCents) || amountCents <= 0) return;
     const storeVal = editStore && editStore !== "none" ? editStore : null;
+    const categoryVal = editCategory && editCategory !== "none" ? editCategory : null;
     updateMutation.mutate(
-      { id: editTx.id, data: { description: editDescription, amount: amountCents, store: storeVal } },
+      { id: editTx.id, data: { description: editDescription, amount: amountCents, store: storeVal, category: categoryVal } },
       { onSuccess: () => setEditTx(null) }
     );
   };
@@ -109,6 +113,11 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
                     </div>
                     <div>
                       <span className="font-medium text-base" data-testid={`text-description-${tx.id}`}>{tx.description}</span>
+                      {tx.category && (
+                        <Badge variant="secondary" className="ml-2 text-[10px] px-1.5 py-0" data-testid={`badge-category-${tx.id}`}>
+                          {getCategoryLabel(tx.category)}
+                        </Badge>
+                      )}
                       {tx.store && (
                         <span className="ml-2 text-xs text-muted-foreground" data-testid={`text-store-${tx.id}`}>
                           {getStoreLabel(tx.store)}
@@ -247,6 +256,11 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
                       </span>
                     )}
                   </span>
+                  {tx.category && (
+                    <Badge variant="secondary" className="text-[10px] px-1.5 py-0 shrink-0" data-testid={`card-badge-category-${tx.id}`}>
+                      {getCategoryLabel(tx.category)}
+                    </Badge>
+                  )}
                   <Badge
                     variant="secondary"
                     className={`
@@ -381,6 +395,22 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
                 onChange={setEditAmount}
                 data-testid="input-edit-transaction-amount"
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Categoria</Label>
+              <Select value={editCategory} onValueChange={setEditCategory}>
+                <SelectTrigger data-testid="select-edit-category">
+                  <SelectValue placeholder="Selecionar categoria..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhuma</SelectItem>
+                  {CATEGORY_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label>Loja / Origem</Label>

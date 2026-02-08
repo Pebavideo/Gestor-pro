@@ -16,6 +16,7 @@ import { CurrencyInput, parseBRL, formatBRL } from "@/components/CurrencyInput";
 import { Plus, ArrowUpCircle, ArrowDownCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Product } from "@shared/schema";
+import { CATEGORY_OPTIONS, getCategoryLabel } from "@shared/schema";
 
 export const STORE_OPTIONS = [
   { value: "fazenda", label: "Fazenda" },
@@ -37,6 +38,7 @@ const formSchema = z.object({
     return !isNaN(parseFloat(cleaned)) && parseFloat(cleaned) > 0;
   }, "Valor deve ser maior que 0"),
   type: z.enum(["income", "expense"]),
+  category: z.string().optional(),
   store: z.string().optional(),
   productId: z.string().optional(),
   productQty: z.string().optional(),
@@ -93,6 +95,7 @@ export function CreateTransactionDialog() {
       description: "",
       amount: "",
       type: "income",
+      category: "none",
       store: "none",
       productId: "",
       productQty: "1",
@@ -113,6 +116,7 @@ export function CreateTransactionDialog() {
       description: string;
       amount: number;
       type: string;
+      category?: string;
       store?: string;
       productId?: number;
       productQty?: number;
@@ -121,6 +125,10 @@ export function CreateTransactionDialog() {
       amount: amountInCents,
       type: values.type,
     };
+
+    if (values.category && values.category !== "none") {
+      payload.category = values.category;
+    }
 
     if (values.store && values.store !== "none") {
       payload.store = values.store;
@@ -216,6 +224,32 @@ export function CreateTransactionDialog() {
                       <SelectItem value="none">Nenhuma</SelectItem>
                       {STORE_OPTIONS.map((opt) => (
                         <SelectItem key={opt.value} value={opt.value} data-testid={`option-store-${opt.value}`}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="category"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Categoria</FormLabel>
+                  <Select value={field.value || "none"} onValueChange={field.onChange}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-category">
+                        <SelectValue placeholder="Selecionar categoria..." />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma</SelectItem>
+                      {CATEGORY_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value} data-testid={`option-category-${opt.value}`}>
                           {opt.label}
                         </SelectItem>
                       ))}
