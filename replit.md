@@ -4,6 +4,9 @@
 Financial management dashboard for businesses. Multi-user system with role-based permissions (Admin/Operator). Built with React + Express + PostgreSQL. All UI in Portuguese.
 
 ## Recent Changes
+- 2026-02-08: Standardized date+time (dd/MM/yyyy HH:mm) display across all tables (Dashboard, Team, Products)
+- 2026-02-08: Added 'Data de Admissao' field to employee creation form (datetime-local input)
+- 2026-02-08: Employee tables now show admission date+time in both desktop and mobile views
 - 2026-02-08: Product creation now asks to auto-launch expense transaction in financial dashboard (quantity × price)
 - 2026-02-08: PDF export for Dashboard (financial report) and TeamManagement (team report) using jsPDF
 - 2026-02-08: WhatsApp share button on transactions and employee payments (generates formatted message via wa.me)

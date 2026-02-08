@@ -181,8 +181,13 @@ export async function registerRoutes(
   app.post("/api/employees", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const input = insertEmployeeSchema.parse(req.body);
-      const employee = await storage.createEmployee(input, userId);
+      const { createdAt, ...rest } = req.body;
+      const input = insertEmployeeSchema.omit({ createdAt: true }).parse(rest);
+      const employeeData: any = { ...input };
+      if (createdAt) {
+        employeeData.createdAt = new Date(createdAt);
+      }
+      const employee = await storage.createEmployee(employeeData, userId);
       res.status(201).json(employee);
     } catch (err) {
       if (err instanceof z.ZodError) {

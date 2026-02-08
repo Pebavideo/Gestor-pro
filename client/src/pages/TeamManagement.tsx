@@ -14,9 +14,12 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Users, Plus, Pencil, Trash2, Inbox, Banknote, DollarSign, FileDown, Printer, Share2 } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, Inbox, Banknote, DollarSign, FileDown, Printer, Share2, Clock } from "lucide-react";
 import { generateTeamPDF, generateWhatsAppMessage, openWhatsApp, printTable } from "@/lib/pdf-generator";
 import { CurrencyInput, parseBRL, centsToFormatted } from "@/components/CurrencyInput";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { Label } from "@/components/ui/label";
 import type { Employee } from "@shared/schema";
 
 const employeeFormSchema = z.object({
@@ -48,6 +51,14 @@ export default function TeamManagement() {
   const { toast } = useToast();
   const [createOpen, setCreateOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [admissionDate, setAdmissionDate] = useState("");
+
+  const getNowDatetimeLocal = () => {
+    const now = new Date();
+    const offset = now.getTimezoneOffset();
+    const local = new Date(now.getTime() - offset * 60000);
+    return local.toISOString().slice(0, 16);
+  };
 
   const createForm = useForm<EmployeeFormData>({
     resolver: zodResolver(employeeFormSchema),
@@ -62,10 +73,14 @@ export default function TeamManagement() {
   const createMutation = useMutation({
     mutationFn: async (data: EmployeeFormData) => {
       const salaryInCents = Math.round(parseBRL(data.salary) * 100);
+      const payload: any = { name: data.name, position: data.position, salary: salaryInCents };
+      if (admissionDate) {
+        payload.createdAt = new Date(admissionDate).toISOString();
+      }
       const res = await fetch("/api/employees", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: data.name, position: data.position, salary: salaryInCents }),
+        body: JSON.stringify(payload),
         credentials: "include",
       });
       if (!res.ok) {
@@ -78,6 +93,7 @@ export default function TeamManagement() {
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
       toast({ title: "Funcionario cadastrado", description: "O funcionario foi adicionado com sucesso." });
       createForm.reset();
+      setAdmissionDate("");
       setCreateOpen(false);
     },
     onError: (error: Error) => {
@@ -244,7 +260,10 @@ export default function TeamManagement() {
                 </AlertDialogContent>
               </AlertDialog>
 
-              <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+              <Dialog open={createOpen} onOpenChange={(open) => {
+                setCreateOpen(open);
+                if (open) setAdmissionDate(getNowDatetimeLocal());
+              }}>
                 <DialogTrigger asChild>
                   <Button data-testid="button-add-employee">
                     <Plus className="h-4 w-4 mr-2" />
@@ -296,6 +315,16 @@ export default function TeamManagement() {
                           </FormItem>
                         )}
                       />
+                      <div className="space-y-2">
+                        <Label htmlFor="employee-admission-date">Data de Admissao</Label>
+                        <Input
+                          id="employee-admission-date"
+                          type="datetime-local"
+                          value={admissionDate}
+                          onChange={(e) => setAdmissionDate(e.target.value)}
+                          data-testid="input-employee-admission-date"
+                        />
+                      </div>
                       <Button type="submit" className="w-full" disabled={createMutation.isPending} data-testid="button-submit-employee">
                         {createMutation.isPending ? "Salvando..." : "Cadastrar"}
                       </Button>
@@ -372,6 +401,7 @@ export default function TeamManagement() {
                 <TableRow className="hover:bg-transparent border-border/50">
                   <TableHead className="pl-6">Nome</TableHead>
                   <TableHead>Cargo</TableHead>
+                  <TableHead>Data de Admissao</TableHead>
                   <TableHead className="text-right">Salario Mensal</TableHead>
                   {isAdmin && <TableHead className="text-right pr-6">Acoes</TableHead>}
                 </TableRow>
@@ -395,6 +425,12 @@ export default function TeamManagement() {
                       <Badge variant="secondary" data-testid={`text-employee-position-${emp.id}`}>
                         {emp.position}
                       </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground font-mono text-sm">
+                      <div className="flex items-center gap-1.5" data-testid={`text-employee-date-${emp.id}`}>
+                        <Clock className="w-3.5 h-3.5" />
+                        {format(new Date(emp.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right font-mono font-medium" data-testid={`text-employee-salary-${emp.id}`}>
                       {formatCurrency(emp.salary / 100)}
@@ -508,6 +544,10 @@ export default function TeamManagement() {
                       <Badge variant="secondary" className="mt-1" data-testid={`card-text-employee-position-${emp.id}`}>
                         {emp.position}
                       </Badge>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1" data-testid={`card-text-employee-date-${emp.id}`}>
+                        <Clock className="w-3 h-3" />
+                        {format(new Date(emp.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                      </p>
                     </div>
                   </div>
                   <Badge variant={emp.active === 1 ? "default" : "secondary"} data-testid={`card-badge-status-${emp.id}`}>
@@ -679,6 +719,7 @@ export default function TeamManagement() {
               <th>#</th>
               <th>Nome</th>
               <th>Cargo</th>
+              <th>Data de Admissao</th>
               <th>Salario Mensal</th>
             </tr>
           </thead>
@@ -688,6 +729,7 @@ export default function TeamManagement() {
                 <td>{idx + 1}</td>
                 <td>{emp.name}</td>
                 <td>{emp.position}</td>
+                <td>{format(new Date(emp.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}</td>
                 <td>{formatCurrency(emp.salary / 100)}</td>
               </tr>
             ))}

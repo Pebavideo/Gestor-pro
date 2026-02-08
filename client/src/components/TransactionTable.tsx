@@ -104,7 +104,7 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
                   </div>
                 </TableCell>
                 <TableCell className="text-muted-foreground font-mono text-sm">
-                  <div>{format(new Date(tx.date), "dd MMM yyyy", { locale: ptBR })}</div>
+                  <div>{format(new Date(tx.date), "dd/MM/yyyy", { locale: ptBR })}</div>
                   <div className="text-xs text-muted-foreground/70">{format(new Date(tx.date), "HH:mm")}</div>
                 </TableCell>
                 <TableCell>

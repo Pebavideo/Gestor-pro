@@ -43,6 +43,7 @@ export const insertEmployeeSchema = createInsertSchema(employees).pick({
   name: true,
   position: true,
   salary: true,
+  createdAt: true,
 });
 
 export const insertProductSchema = createInsertSchema(products).pick({
