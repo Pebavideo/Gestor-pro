@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -16,6 +17,23 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CurrencyInput, parseBRL, centsToFormatted } from "@/components/CurrencyInput";
 import type { Product } from "@shared/schema";
+
+const UNIT_OPTIONS = [
+  { value: "UN", label: "UN (Unidade)" },
+  { value: "KG", label: "KG (Quilograma)" },
+  { value: "M", label: "M (Metro)" },
+  { value: "M2", label: "M\u00B2 (Metro Quadrado)" },
+  { value: "M3", label: "M\u00B3 (Metro C\u00FAbico)" },
+  { value: "CX", label: "CX (Caixa)" },
+  { value: "FD", label: "FD (Fardo)" },
+  { value: "LT", label: "LT (Litro)" },
+];
+
+function formatUnit(unit: string): string {
+  if (unit === "M2") return "M\u00B2";
+  if (unit === "M3") return "M\u00B3";
+  return unit;
+}
 
 export default function Products() {
   const { isAdmin } = useAuth();
@@ -34,15 +52,17 @@ export default function Products() {
   const [showCreate, setShowCreate] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [showExpenseDialog, setShowExpenseDialog] = useState(false);
-  const [pendingExpense, setPendingExpense] = useState<{ name: string; quantity: number; priceCents: number } | null>(null);
+  const [pendingExpense, setPendingExpense] = useState<{ name: string; unit: string; quantity: number; priceCents: number } | null>(null);
 
   const [formName, setFormName] = useState("");
+  const [formSpecification, setFormSpecification] = useState("");
+  const [formUnit, setFormUnit] = useState("UN");
   const [formQuantity, setFormQuantity] = useState("");
   const [formPrice, setFormPrice] = useState("");
   const [formDate, setFormDate] = useState("");
 
   const createMutation = useMutation({
-    mutationFn: async (data: { name: string; quantity: number; price: number; createdAt?: string }) => {
+    mutationFn: async (data: { name: string; specification?: string; unit: string; quantity: number; price: number; createdAt?: string }) => {
       const res = await fetch("/api/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -60,7 +80,7 @@ export default function Products() {
       toast({ title: "Produto cadastrado", description: "O produto foi adicionado com sucesso." });
       const totalCents = input.quantity * input.price;
       if (totalCents > 0 && input.quantity > 0) {
-        setPendingExpense({ name: input.name, quantity: input.quantity, priceCents: input.price });
+        setPendingExpense({ name: input.name, unit: input.unit, quantity: input.quantity, priceCents: input.price });
         setShowExpenseDialog(true);
       }
       resetForm();
@@ -99,7 +119,7 @@ export default function Products() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<{ name: string; quantity: number; price: number }> }) => {
+    mutationFn: async ({ id, data }: { id: number; data: Partial<{ name: string; specification: string; unit: string; quantity: number; price: number }> }) => {
       const res = await fetch(`/api/products/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -138,6 +158,8 @@ export default function Products() {
 
   const resetForm = () => {
     setFormName("");
+    setFormSpecification("");
+    setFormUnit("UN");
     setFormQuantity("");
     setFormPrice("");
     setFormDate("");
@@ -159,6 +181,8 @@ export default function Products() {
   const openEdit = (p: Product) => {
     setEditProduct(p);
     setFormName(p.name);
+    setFormSpecification(p.specification || "");
+    setFormUnit(p.unit || "UN");
     setFormQuantity(String(p.quantity));
     setFormPrice(centsToFormatted(p.price));
   };
@@ -167,7 +191,10 @@ export default function Products() {
     const price = Math.round(parseBRL(formPrice) * 100);
     const quantity = parseInt(formQuantity) || 0;
     if (!formName.trim() || isNaN(price) || price <= 0) return;
-    const data: { name: string; quantity: number; price: number; createdAt?: string } = { name: formName.trim(), quantity, price };
+    const data: { name: string; specification?: string; unit: string; quantity: number; price: number; createdAt?: string } = { name: formName.trim(), unit: formUnit, quantity, price };
+    if (formSpecification.trim()) {
+      data.specification = formSpecification.trim();
+    }
     if (formDate) {
       data.createdAt = new Date(formDate).toISOString();
     }
@@ -179,7 +206,7 @@ export default function Products() {
     const price = Math.round(parseBRL(formPrice) * 100);
     const quantity = parseInt(formQuantity) || 0;
     if (!formName.trim() || isNaN(price) || price <= 0) return;
-    updateMutation.mutate({ id: editProduct.id, data: { name: formName.trim(), quantity, price } });
+    updateMutation.mutate({ id: editProduct.id, data: { name: formName.trim(), specification: formSpecification.trim() || undefined, unit: formUnit, quantity, price } });
   };
 
   const totalProducts = products.length;
@@ -219,7 +246,7 @@ export default function Products() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Total em Estoque</p>
-              <p className="text-2xl font-bold" data-testid="text-total-stock">{totalStock} un.</p>
+              <p className="text-2xl font-bold" data-testid="text-total-stock">{totalStock} itens</p>
             </div>
           </div>
         </Card>
@@ -257,6 +284,7 @@ export default function Products() {
             <TableHeader className="bg-muted/30">
               <TableRow className="hover:bg-transparent border-border/50">
                 <TableHead className="pl-6">Nome</TableHead>
+                <TableHead>Especificacao</TableHead>
                 <TableHead>Data de Entrada</TableHead>
                 <TableHead className="text-right">Qtd. Estoque</TableHead>
                 <TableHead className="text-right">Preco Sugerido</TableHead>
@@ -274,6 +302,9 @@ export default function Products() {
                       <span className="font-medium" data-testid={`text-product-name-${p.id}`}>{p.name}</span>
                     </div>
                   </TableCell>
+                  <TableCell className="text-muted-foreground text-sm" data-testid={`text-product-spec-${p.id}`}>
+                    {p.specification || "-"}
+                  </TableCell>
                   <TableCell className="text-muted-foreground text-sm">
                     <div className="flex items-center gap-1.5" data-testid={`text-product-date-${p.id}`}>
                       <Clock className="w-3.5 h-3.5" />
@@ -286,7 +317,7 @@ export default function Products() {
                       className={p.quantity <= 0 ? "bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400" : ""}
                       data-testid={`text-product-qty-${p.id}`}
                     >
-                      {p.quantity} un.
+                      {p.quantity} {formatUnit(p.unit || "UN")}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right font-mono font-medium" data-testid={`text-product-price-${p.id}`}>
@@ -342,6 +373,9 @@ export default function Products() {
                   </div>
                   <div className="min-w-0">
                     <p className="font-medium truncate" data-testid={`text-product-name-${p.id}`}>{p.name}</p>
+                    {p.specification && (
+                      <p className="text-xs text-muted-foreground mt-0.5" data-testid={`text-product-spec-${p.id}`}>{p.specification}</p>
+                    )}
                     <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5" data-testid={`text-product-date-${p.id}`}>
                       <Clock className="w-3 h-3" />
                       {format(new Date(p.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}
@@ -381,7 +415,7 @@ export default function Products() {
                   className={p.quantity <= 0 ? "bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400" : ""}
                   data-testid={`text-product-qty-${p.id}`}
                 >
-                  {p.quantity} un.
+                  {p.quantity} {formatUnit(p.unit || "UN")}
                 </Badge>
                 <span className="font-mono font-medium" data-testid={`text-product-price-${p.id}`}>
                   {formatCurrency(p.price / 100)}
@@ -402,11 +436,30 @@ export default function Products() {
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label htmlFor="create-product-name">Nome</Label>
-              <Input id="create-product-name" value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="Nome do produto" data-testid="input-product-name" />
+              <Input id="create-product-name" value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="Ex: Parafuso, Cimento, Cabo" data-testid="input-product-name" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="create-product-qty">Quantidade em Estoque</Label>
-              <Input id="create-product-qty" type="number" min="0" value={formQuantity} onChange={(e) => setFormQuantity(e.target.value)} placeholder="0" data-testid="input-product-quantity" />
+              <Label htmlFor="create-product-spec">Especificacao / Tamanho</Label>
+              <Input id="create-product-spec" value={formSpecification} onChange={(e) => setFormSpecification(e.target.value)} placeholder="Ex: 1cm, 80cm, 50kg, Azul" data-testid="input-product-specification" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Unidade</Label>
+                <Select value={formUnit} onValueChange={setFormUnit} data-testid="select-product-unit">
+                  <SelectTrigger data-testid="select-product-unit-trigger">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {UNIT_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value} data-testid={`select-unit-${opt.value}`}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="create-product-qty">Quantidade</Label>
+                <Input id="create-product-qty" type="number" min="0" value={formQuantity} onChange={(e) => setFormQuantity(e.target.value)} placeholder="0" data-testid="input-product-quantity" />
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="create-product-price">Preco Sugerido (R$)</Label>
@@ -438,8 +491,27 @@ export default function Products() {
               <Input id="edit-product-name" value={formName} onChange={(e) => setFormName(e.target.value)} data-testid="input-edit-product-name" />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-product-qty">Quantidade em Estoque</Label>
-              <Input id="edit-product-qty" type="number" min="0" value={formQuantity} onChange={(e) => setFormQuantity(e.target.value)} data-testid="input-edit-product-quantity" />
+              <Label htmlFor="edit-product-spec">Especificacao / Tamanho</Label>
+              <Input id="edit-product-spec" value={formSpecification} onChange={(e) => setFormSpecification(e.target.value)} placeholder="Ex: 1cm, 80cm, 50kg, Azul" data-testid="input-edit-product-specification" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Unidade</Label>
+                <Select value={formUnit} onValueChange={setFormUnit}>
+                  <SelectTrigger data-testid="select-edit-product-unit-trigger">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {UNIT_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-product-qty">Quantidade</Label>
+                <Input id="edit-product-qty" type="number" min="0" value={formQuantity} onChange={(e) => setFormQuantity(e.target.value)} data-testid="input-edit-product-quantity" />
+              </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-product-price">Preco Sugerido (R$)</Label>
@@ -473,7 +545,7 @@ export default function Products() {
                     </div>
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <span className="text-sm text-muted-foreground">Quantidade:</span>
-                      <span className="font-medium text-foreground">{pendingExpense.quantity} un.</span>
+                      <span className="font-medium text-foreground">{pendingExpense.quantity} {formatUnit(pendingExpense.unit)}</span>
                     </div>
                     <div className="flex items-center justify-between gap-2 flex-wrap">
                       <span className="text-sm text-muted-foreground">Preco unitario:</span>

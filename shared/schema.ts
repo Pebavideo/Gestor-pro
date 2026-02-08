@@ -34,6 +34,8 @@ export const employees = pgTable("employees", {
 export const products = pgTable("products", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
+  specification: text("specification"),
+  unit: text("unit").notNull().default("UN"),
   quantity: integer("quantity").notNull().default(0),
   price: integer("price").notNull(),
   userId: varchar("user_id").notNull(),
@@ -51,6 +53,8 @@ export const insertEmployeeSchema = createInsertSchema(employees).pick({
 
 export const insertProductSchema = createInsertSchema(products).pick({
   name: true,
+  specification: true,
+  unit: true,
   quantity: true,
   price: true,
   createdAt: true,

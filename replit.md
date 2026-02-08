@@ -23,6 +23,7 @@ Financial management dashboard for businesses. Multi-user system with role-based
 - 2026-02-08: Mobile responsive: tables convert to card layout on small screens, reduced padding
 - 2026-02-08: Products now record date+time of entry (datetime-local input, displayed as dd/MM/yyyy HH:mm)
 - 2026-02-08: Transactions now display time (HH:mm) alongside date
+- 2026-02-08: Products now have 'unit' dropdown (UN, KG, M, M², M³, CX, FD, LT) and 'specification' field for detailed descriptions
 - 2026-02-08: Added Products/Inventory module (CRUD, stock tracking, price management)
 - 2026-02-08: Income transactions can link to products to auto-decrement stock
 - 2026-02-08: Upgraded Dashboard filter to support Year + Month selectors (multi-year history)
@@ -48,7 +49,7 @@ Financial management dashboard for businesses. Multi-user system with role-based
 - `users`: id (varchar UUID), email (unique), firstName, lastName, passwordHash, emailVerified, verificationCode, verificationCodeExpiresAt, role ('admin'|'operator'), createdAt, updatedAt
 - `transactions`: id (serial), description, amount (cents), type, userId, date, reconciled (0/1)
 - `employees`: id (serial), name, position, salary (cents), userId, active (1/0), createdAt
-- `products`: id (serial), name, quantity, price (cents), userId, active (1/0), createdAt
+- `products`: id (serial), name, specification (text, nullable), unit (text, default 'UN'), quantity, price (cents), userId, active (1/0), createdAt
 - `settings`: id (serial), userId (unique), taxRate
 - `sessions`: sid, sess, expire (for express-session with connect-pg-simple)
 
