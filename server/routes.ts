@@ -181,12 +181,16 @@ export async function registerRoutes(
   app.post("/api/employees", isAuthenticated, requireVerified, requireAdmin, async (req, res) => {
     try {
       const userId = getUserId(req);
-      const { createdAt, ...rest } = req.body;
-      const input = insertEmployeeSchema.omit({ createdAt: true }).parse(rest);
+      const { createdAt, salaryType, ...rest } = req.body;
+      const input = insertEmployeeSchema.omit({ createdAt: true, salaryType: true }).parse(rest);
       const employeeData: any = { ...input };
       if (createdAt) {
         employeeData.createdAt = new Date(createdAt);
       }
+      if (salaryType && !["monthly", "daily"].includes(salaryType)) {
+        return res.status(400).json({ message: "Tipo de salario invalido. Use 'monthly' ou 'daily'." });
+      }
+      employeeData.salaryType = salaryType || "monthly";
       const employee = await storage.createEmployee(employeeData, userId);
       res.status(201).json(employee);
     } catch (err) {
@@ -202,7 +206,14 @@ export async function registerRoutes(
       const id = parseInt(req.params.id as string);
       if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
       const userId = getUserId(req);
-      const input = insertEmployeeSchema.partial().parse(req.body);
+      const { salaryType, ...rest } = req.body;
+      const input: any = insertEmployeeSchema.partial().omit({ salaryType: true }).parse(rest);
+      if (salaryType !== undefined) {
+        if (!["monthly", "daily"].includes(salaryType)) {
+          return res.status(400).json({ message: "Tipo de salario invalido. Use 'monthly' ou 'daily'." });
+        }
+        input.salaryType = salaryType;
+      }
       const employee = await storage.updateEmployee(id, input, userId);
       if (!employee) return res.status(404).json({ message: "Funcionario nao encontrado" });
       res.json(employee);

@@ -14,6 +14,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Users, Plus, Pencil, Trash2, Inbox, Banknote, DollarSign, FileDown, Printer, Share2, Clock, Mail } from "lucide-react";
 import { generateTeamPDF, generateWhatsAppMessage, openWhatsApp, printTable, openEmailTeam } from "@/lib/pdf-generator";
 import { CurrencyInput, parseBRL, centsToFormatted } from "@/components/CurrencyInput";
@@ -52,6 +53,8 @@ export default function TeamManagement() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [admissionDate, setAdmissionDate] = useState("");
+  const [salaryType, setSalaryType] = useState<string>("monthly");
+  const [editSalaryType, setEditSalaryType] = useState<string>("monthly");
 
   const getNowDatetimeLocal = () => {
     const now = new Date();
@@ -73,7 +76,7 @@ export default function TeamManagement() {
   const createMutation = useMutation({
     mutationFn: async (data: EmployeeFormData) => {
       const salaryInCents = Math.round(parseBRL(data.salary) * 100);
-      const payload: any = { name: data.name, position: data.position, salary: salaryInCents };
+      const payload: any = { name: data.name, position: data.position, salary: salaryInCents, salaryType };
       if (admissionDate) {
         payload.createdAt = new Date(admissionDate).toISOString();
       }
@@ -94,6 +97,7 @@ export default function TeamManagement() {
       toast({ title: "Funcionario cadastrado", description: "O funcionario foi adicionado com sucesso." });
       createForm.reset();
       setAdmissionDate("");
+      setSalaryType("monthly");
       setCreateOpen(false);
     },
     onError: (error: Error) => {
@@ -107,7 +111,7 @@ export default function TeamManagement() {
       const res = await fetch(`/api/employees/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: data.name, position: data.position, salary: salaryInCents }),
+        body: JSON.stringify({ name: data.name, position: data.position, salary: salaryInCents, salaryType: editSalaryType }),
         credentials: "include",
       });
       if (!res.ok) {
@@ -189,6 +193,7 @@ export default function TeamManagement() {
 
   function openEdit(emp: Employee) {
     setEditingEmployee(emp);
+    setEditSalaryType(emp.salaryType || "monthly");
     editForm.reset({
       name: emp.name,
       position: emp.position,
@@ -317,7 +322,7 @@ export default function TeamManagement() {
                         name="salary"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Salario Mensal (R$)</FormLabel>
+                            <FormLabel>Salario (R$)</FormLabel>
                             <FormControl>
                               <CurrencyInput value={field.value} onChange={field.onChange} data-testid="input-employee-salary" />
                             </FormControl>
@@ -325,6 +330,18 @@ export default function TeamManagement() {
                           </FormItem>
                         )}
                       />
+                      <div className="space-y-2">
+                        <Label>Tipo de Salario</Label>
+                        <Select value={salaryType} onValueChange={setSalaryType}>
+                          <SelectTrigger data-testid="select-salary-type">
+                            <SelectValue placeholder="Tipo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="monthly" data-testid="option-salary-monthly">Mensal</SelectItem>
+                            <SelectItem value="daily" data-testid="option-salary-daily">Diaria</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
                       <div className="space-y-2">
                         <Label htmlFor="employee-admission-date">Data de Admissao</Label>
                         <Input
@@ -399,7 +416,7 @@ export default function TeamManagement() {
                   <TableHead className="pl-6">Nome</TableHead>
                   <TableHead>Cargo</TableHead>
                   <TableHead>Data de Admissao</TableHead>
-                  <TableHead className="text-right">Salario Mensal</TableHead>
+                  <TableHead className="text-right">Salario</TableHead>
                   {isAdmin && <TableHead className="text-right pr-6">Acoes</TableHead>}
                 </TableRow>
               </TableHeader>
@@ -429,8 +446,13 @@ export default function TeamManagement() {
                         {format(new Date(emp.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}
                       </div>
                     </TableCell>
-                    <TableCell className="text-right font-mono font-medium" data-testid={`text-employee-salary-${emp.id}`}>
-                      {formatCurrency(emp.salary / 100)}
+                    <TableCell className="text-right" data-testid={`text-employee-salary-${emp.id}`}>
+                      <div className="flex items-center justify-end gap-2">
+                        <Badge variant="secondary" className="text-xs" data-testid={`badge-salary-type-${emp.id}`}>
+                          {emp.salaryType === "daily" ? "Diaria" : "Mensal"}
+                        </Badge>
+                        <span className="font-mono font-medium">{formatCurrency(emp.salary / 100)}</span>
+                      </div>
                     </TableCell>
                     {isAdmin && (
                       <TableCell className="text-right pr-6">
@@ -552,9 +574,14 @@ export default function TeamManagement() {
                   </Badge>
                 </div>
                 <div className="mt-3 flex items-center justify-between gap-2 flex-wrap">
-                  <p className="font-mono font-medium text-lg" data-testid={`card-text-employee-salary-${emp.id}`}>
-                    {formatCurrency(emp.salary / 100)}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary" className="text-xs" data-testid={`card-badge-salary-type-${emp.id}`}>
+                      {emp.salaryType === "daily" ? "Diaria" : "Mensal"}
+                    </Badge>
+                    <p className="font-mono font-medium text-lg" data-testid={`card-text-employee-salary-${emp.id}`}>
+                      {formatCurrency(emp.salary / 100)}
+                    </p>
+                  </div>
                   {isAdmin && (
                     <div className="flex items-center gap-1">
                       <Button
@@ -693,7 +720,7 @@ export default function TeamManagement() {
                 name="salary"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Salario Mensal (R$)</FormLabel>
+                    <FormLabel>Salario (R$)</FormLabel>
                     <FormControl>
                       <CurrencyInput value={field.value} onChange={field.onChange} data-testid="input-edit-employee-salary" />
                     </FormControl>
@@ -701,6 +728,18 @@ export default function TeamManagement() {
                   </FormItem>
                 )}
               />
+              <div className="space-y-2">
+                <Label>Tipo de Salario</Label>
+                <Select value={editSalaryType} onValueChange={setEditSalaryType}>
+                  <SelectTrigger data-testid="select-edit-salary-type">
+                    <SelectValue placeholder="Tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="monthly" data-testid="option-edit-salary-monthly">Mensal</SelectItem>
+                    <SelectItem value="daily" data-testid="option-edit-salary-daily">Diaria</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <Button type="submit" className="w-full" disabled={editMutation.isPending} data-testid="button-submit-edit-employee">
                 {editMutation.isPending ? "Salvando..." : "Salvar Alteracoes"}
               </Button>
@@ -717,7 +756,8 @@ export default function TeamManagement() {
               <th>Nome</th>
               <th>Cargo</th>
               <th>Data de Admissao</th>
-              <th>Salario Mensal</th>
+              <th>Tipo</th>
+              <th>Salario</th>
             </tr>
           </thead>
           <tbody>
@@ -727,6 +767,7 @@ export default function TeamManagement() {
                 <td>{emp.name}</td>
                 <td>{emp.position}</td>
                 <td>{format(new Date(emp.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}</td>
+                <td>{emp.salaryType === "daily" ? "Diaria" : "Mensal"}</td>
                 <td>{formatCurrency(emp.salary / 100)}</td>
               </tr>
             ))}

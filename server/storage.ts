@@ -142,6 +142,18 @@ export class DatabaseStorage implements IStorage {
     return true;
   }
 
+  private getPaymentDescription(empName: string, salaryType: string): string {
+    const now = new Date();
+    const monthNames = [
+      "Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho",
+      "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+    ];
+    const month = monthNames[now.getMonth()];
+    const year = now.getFullYear();
+    const typeLabel = salaryType === "daily" ? "Diaria" : "Mensal";
+    return `Pagamento ${empName} - ${typeLabel} - Referente a ${month}/${year}`;
+  }
+
   async processPayroll(userId: string): Promise<Transaction[]> {
     const activeEmployees = await this.getEmployees(userId);
     const created: Transaction[] = [];
@@ -149,7 +161,7 @@ export class DatabaseStorage implements IStorage {
       const [tx] = await db
         .insert(transactions)
         .values({
-          description: `Pagamento - ${emp.name}`,
+          description: this.getPaymentDescription(emp.name, emp.salaryType),
           amount: emp.salary,
           type: "expense",
           userId,
@@ -167,7 +179,7 @@ export class DatabaseStorage implements IStorage {
     const [tx] = await db
       .insert(transactions)
       .values({
-        description: `Pagamento - ${emp.name}`,
+        description: this.getPaymentDescription(emp.name, emp.salaryType),
         amount: emp.salary,
         type: "expense",
         userId,

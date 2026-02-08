@@ -24,6 +24,7 @@ export const employees = pgTable("employees", {
   name: text("name").notNull(),
   position: text("position").notNull(),
   salary: integer("salary").notNull(),
+  salaryType: text("salary_type").notNull().default("monthly"),
   userId: varchar("user_id").notNull(),
   active: integer("active").notNull().default(1),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -43,6 +44,7 @@ export const insertEmployeeSchema = createInsertSchema(employees).pick({
   name: true,
   position: true,
   salary: true,
+  salaryType: true,
   createdAt: true,
 });
 
