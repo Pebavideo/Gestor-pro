@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Plus, Package, Pencil, Trash2, PackageOpen, ShoppingBag } from "lucide-react";
+import { CurrencyInput, parseBRL, centsToFormatted } from "@/components/CurrencyInput";
 import type { Product } from "@shared/schema";
 
 export default function Products() {
@@ -113,11 +114,11 @@ export default function Products() {
     setEditProduct(p);
     setFormName(p.name);
     setFormQuantity(String(p.quantity));
-    setFormPrice(String(p.price / 100));
+    setFormPrice(centsToFormatted(p.price));
   };
 
   const submitCreate = () => {
-    const price = Math.round(parseFloat(formPrice) * 100);
+    const price = Math.round(parseBRL(formPrice) * 100);
     const quantity = parseInt(formQuantity) || 0;
     if (!formName.trim() || isNaN(price) || price <= 0) return;
     createMutation.mutate({ name: formName.trim(), quantity, price });
@@ -125,7 +126,7 @@ export default function Products() {
 
   const submitEdit = () => {
     if (!editProduct) return;
-    const price = Math.round(parseFloat(formPrice) * 100);
+    const price = Math.round(parseBRL(formPrice) * 100);
     const quantity = parseInt(formQuantity) || 0;
     if (!formName.trim() || isNaN(price) || price <= 0) return;
     updateMutation.mutate({ id: editProduct.id, data: { name: formName.trim(), quantity, price } });
@@ -291,7 +292,7 @@ export default function Products() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="create-product-price">Preco Sugerido (R$)</Label>
-              <Input id="create-product-price" type="number" step="0.01" min="0.01" value={formPrice} onChange={(e) => setFormPrice(e.target.value)} placeholder="0.00" data-testid="input-product-price" />
+              <CurrencyInput id="create-product-price" value={formPrice} onChange={setFormPrice} data-testid="input-product-price" />
             </div>
           </div>
           <DialogFooter>
@@ -320,7 +321,7 @@ export default function Products() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-product-price">Preco Sugerido (R$)</Label>
-              <Input id="edit-product-price" type="number" step="0.01" min="0.01" value={formPrice} onChange={(e) => setFormPrice(e.target.value)} data-testid="input-edit-product-price" />
+              <CurrencyInput id="edit-product-price" value={formPrice} onChange={setFormPrice} data-testid="input-edit-product-price" />
             </div>
           </div>
           <DialogFooter>

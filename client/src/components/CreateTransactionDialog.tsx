@@ -12,13 +12,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { formatCurrency } from "@/hooks/use-transactions";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { CurrencyInput, parseBRL, formatBRL } from "@/components/CurrencyInput";
 import { Plus, ArrowUpCircle, ArrowDownCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Product } from "@shared/schema";
 
 const formSchema = z.object({
   description: z.string().min(3, "Descricao muito curta"),
-  amount: z.string().refine((val) => !isNaN(parseFloat(val)) && parseFloat(val) > 0, "Valor deve ser maior que 0"),
+  amount: z.string().refine((val) => {
+    const cleaned = val.replace(/\./g, "").replace(",", ".");
+    return !isNaN(parseFloat(cleaned)) && parseFloat(cleaned) > 0;
+  }, "Valor deve ser maior que 0"),
   type: z.enum(["income", "expense"]),
   productId: z.string().optional(),
   productQty: z.string().optional(),
@@ -88,7 +92,7 @@ export function CreateTransactionDialog() {
     : null;
 
   function onSubmit(values: z.infer<typeof formSchema>) {
-    const amountInCents = Math.round(parseFloat(values.amount.replace(",", ".")) * 100);
+    const amountInCents = Math.round(parseBRL(values.amount) * 100);
 
     const payload: {
       description: string;
@@ -116,7 +120,7 @@ export function CreateTransactionDialog() {
       const product = products.find((p) => p.id === parseInt(productId));
       if (product) {
         form.setValue("description", `Venda - ${product.name}`);
-        form.setValue("amount", String(product.price / 100));
+        form.setValue("amount", formatBRL(product.price / 100));
       }
     }
   }
@@ -247,12 +251,10 @@ export function CreateTransactionDialog() {
                 <FormItem>
                   <FormLabel>Valor (R$)</FormLabel>
                   <FormControl>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      placeholder="0.00"
+                    <CurrencyInput
+                      value={field.value}
+                      onChange={field.onChange}
                       className="font-mono text-lg"
-                      {...field}
                       data-testid="input-transaction-amount"
                     />
                   </FormControl>

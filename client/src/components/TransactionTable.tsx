@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { CurrencyInput, parseBRL, centsToFormatted } from "@/components/CurrencyInput";
 import { Trash2, ArrowUpRight, ArrowDownRight, Inbox, Pencil } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -26,12 +27,12 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
   const openEdit = (tx: Transaction) => {
     setEditTx(tx);
     setEditDescription(tx.description);
-    setEditAmount(String(tx.amount / 100));
+    setEditAmount(centsToFormatted(tx.amount));
   };
 
   const submitEdit = () => {
     if (!editTx) return;
-    const amountCents = Math.round(parseFloat(editAmount) * 100);
+    const amountCents = Math.round(parseBRL(editAmount) * 100);
     if (isNaN(amountCents) || amountCents <= 0) return;
     updateMutation.mutate(
       { id: editTx.id, data: { description: editDescription, amount: amountCents } },
@@ -185,13 +186,10 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-tx-amount">Valor (R$)</Label>
-              <Input
+              <CurrencyInput
                 id="edit-tx-amount"
-                type="number"
-                step="0.01"
-                min="0.01"
                 value={editAmount}
-                onChange={(e) => setEditAmount(e.target.value)}
+                onChange={setEditAmount}
                 data-testid="input-edit-transaction-amount"
               />
             </div>

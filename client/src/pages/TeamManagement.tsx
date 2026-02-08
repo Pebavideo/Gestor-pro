@@ -15,12 +15,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Users, Plus, Pencil, Trash2, Inbox, Banknote, DollarSign } from "lucide-react";
+import { CurrencyInput, parseBRL, centsToFormatted } from "@/components/CurrencyInput";
 import type { Employee } from "@shared/schema";
 
 const employeeFormSchema = z.object({
   name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
   position: z.string().min(2, "Cargo deve ter pelo menos 2 caracteres"),
-  salary: z.string().min(1, "Salario e obrigatorio"),
+  salary: z.string().min(1, "Salario e obrigatorio").refine((val) => {
+    const cleaned = val.replace(/\./g, "").replace(",", ".");
+    return !isNaN(parseFloat(cleaned)) && parseFloat(cleaned) > 0;
+  }, "Salario deve ser maior que 0"),
 });
 
 type EmployeeFormData = z.infer<typeof employeeFormSchema>;
@@ -56,7 +60,7 @@ export default function TeamManagement() {
 
   const createMutation = useMutation({
     mutationFn: async (data: EmployeeFormData) => {
-      const salaryInCents = Math.round(parseFloat(data.salary) * 100);
+      const salaryInCents = Math.round(parseBRL(data.salary) * 100);
       const res = await fetch("/api/employees", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -82,7 +86,7 @@ export default function TeamManagement() {
 
   const editMutation = useMutation({
     mutationFn: async ({ id, data }: { id: number; data: EmployeeFormData }) => {
-      const salaryInCents = Math.round(parseFloat(data.salary) * 100);
+      const salaryInCents = Math.round(parseBRL(data.salary) * 100);
       const res = await fetch(`/api/employees/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -171,7 +175,7 @@ export default function TeamManagement() {
     editForm.reset({
       name: emp.name,
       position: emp.position,
-      salary: (emp.salary / 100).toFixed(2),
+      salary: centsToFormatted(emp.salary),
     });
   }
 
@@ -265,7 +269,7 @@ export default function TeamManagement() {
                           <FormItem>
                             <FormLabel>Salario Mensal (R$)</FormLabel>
                             <FormControl>
-                              <Input type="number" step="0.01" min="0" placeholder="0,00" data-testid="input-employee-salary" {...field} />
+                              <CurrencyInput value={field.value} onChange={field.onChange} data-testid="input-employee-salary" />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -499,7 +503,7 @@ export default function TeamManagement() {
                   <FormItem>
                     <FormLabel>Salario Mensal (R$)</FormLabel>
                     <FormControl>
-                      <Input type="number" step="0.01" min="0" data-testid="input-edit-employee-salary" {...field} />
+                      <CurrencyInput value={field.value} onChange={field.onChange} data-testid="input-edit-employee-salary" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
