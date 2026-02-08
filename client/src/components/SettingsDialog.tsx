@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -85,27 +85,25 @@ export function SettingsDialog() {
               )}
             />
 
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setOpen(false)}
-                className="flex-1 h-11 rounded-xl"
-                data-testid="button-cancel-settings"
-              >
-                Cancelar
-              </Button>
-              <Button 
-                type="submit" 
-                disabled={isPending}
-                className="flex-1 h-11 rounded-xl"
-                data-testid="button-submit-settings"
-              >
-                {isPending ? "Salvando..." : "Salvar"}
-              </Button>
-            </div>
           </form>
         </Form>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setOpen(false)}
+            data-testid="button-cancel-settings"
+          >
+            Cancelar
+          </Button>
+          <Button 
+            disabled={isPending}
+            onClick={form.handleSubmit(onSubmit)}
+            data-testid="button-submit-settings"
+          >
+            {isPending ? "Salvando..." : "Salvar"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -309,25 +309,26 @@ export function CreateTransactionDialog() {
               )}
             />
 
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setOpen(false)}
-                data-testid="button-cancel-transaction"
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                disabled={createMutation.isPending}
-                data-testid="button-submit-transaction"
-              >
-                {createMutation.isPending ? "Salvando..." : "Confirmar Transacao"}
-              </Button>
-            </div>
           </form>
         </Form>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setOpen(false)}
+            data-testid="button-cancel-transaction"
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="submit"
+            disabled={createMutation.isPending}
+            onClick={form.handleSubmit(onSubmit)}
+            data-testid="button-submit-transaction"
+          >
+            {createMutation.isPending ? "Salvando..." : "Confirmar Transacao"}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

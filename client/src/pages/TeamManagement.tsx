@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -352,16 +352,16 @@ export default function TeamManagement() {
                           data-testid="input-employee-admission-date"
                         />
                       </div>
-                      <div className="flex gap-2">
-                        <Button type="button" variant="outline" className="flex-1" onClick={() => setCreateOpen(false)} data-testid="button-cancel-employee">
-                          Cancelar
-                        </Button>
-                        <Button type="submit" className="flex-1" disabled={createMutation.isPending} data-testid="button-submit-employee">
-                          {createMutation.isPending ? "Salvando..." : "Cadastrar"}
-                        </Button>
-                      </div>
                     </form>
                   </Form>
+                  <DialogFooter>
+                    <Button type="button" variant="outline" onClick={() => setCreateOpen(false)} data-testid="button-cancel-employee">
+                      Cancelar
+                    </Button>
+                    <Button type="submit" disabled={createMutation.isPending} onClick={createForm.handleSubmit((d) => createMutation.mutate(d))} data-testid="button-submit-employee">
+                      {createMutation.isPending ? "Salvando..." : "Cadastrar"}
+                    </Button>
+                  </DialogFooter>
                 </DialogContent>
               </Dialog>
             </>
@@ -745,16 +745,16 @@ export default function TeamManagement() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex gap-2">
-                <Button type="button" variant="outline" className="flex-1" onClick={() => setEditingEmployee(null)} data-testid="button-cancel-edit-employee">
-                  Cancelar
-                </Button>
-                <Button type="submit" className="flex-1" disabled={editMutation.isPending} data-testid="button-submit-edit-employee">
-                  {editMutation.isPending ? "Salvando..." : "Salvar Alteracoes"}
-                </Button>
-              </div>
             </form>
           </Form>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setEditingEmployee(null)} data-testid="button-cancel-edit-employee">
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={editMutation.isPending} onClick={editForm.handleSubmit((d) => editingEmployee && editMutation.mutate({ id: editingEmployee.id, data: d }))} data-testid="button-submit-edit-employee">
+              {editMutation.isPending ? "Salvando..." : "Salvar Alteracoes"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
