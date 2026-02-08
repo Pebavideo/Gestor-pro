@@ -16,6 +16,7 @@ import { Plus, Package, Pencil, Trash2, PackageOpen, ShoppingBag, Clock, ArrowDo
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CurrencyInput, parseBRL, centsToFormatted } from "@/components/CurrencyInput";
+import { STORE_OPTIONS, getStoreLabel } from "@/components/CreateTransactionDialog";
 import type { Product } from "@shared/schema";
 
 const UNIT_OPTIONS = [
@@ -57,12 +58,13 @@ export default function Products() {
   const [formName, setFormName] = useState("");
   const [formSpecification, setFormSpecification] = useState("");
   const [formUnit, setFormUnit] = useState("UN");
+  const [formStore, setFormStore] = useState("none");
   const [formQuantity, setFormQuantity] = useState("");
   const [formPrice, setFormPrice] = useState("");
   const [formDate, setFormDate] = useState("");
 
   const createMutation = useMutation({
-    mutationFn: async (data: { name: string; specification?: string; unit: string; quantity: number; price: number; createdAt?: string }) => {
+    mutationFn: async (data: { name: string; specification?: string; unit: string; store?: string; quantity: number; price: number; createdAt?: string }) => {
       const res = await fetch("/api/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -119,7 +121,7 @@ export default function Products() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<{ name: string; specification: string; unit: string; quantity: number; price: number }> }) => {
+    mutationFn: async ({ id, data }: { id: number; data: Partial<{ name: string; specification: string; unit: string; store: string | null; quantity: number; price: number }> }) => {
       const res = await fetch(`/api/products/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -160,6 +162,7 @@ export default function Products() {
     setFormName("");
     setFormSpecification("");
     setFormUnit("UN");
+    setFormStore("none");
     setFormQuantity("");
     setFormPrice("");
     setFormDate("");
@@ -183,6 +186,7 @@ export default function Products() {
     setFormName(p.name);
     setFormSpecification(p.specification || "");
     setFormUnit(p.unit || "UN");
+    setFormStore(p.store || "none");
     setFormQuantity(String(p.quantity));
     setFormPrice(centsToFormatted(p.price));
   };
@@ -191,9 +195,12 @@ export default function Products() {
     const price = Math.round(parseBRL(formPrice) * 100);
     const quantity = parseInt(formQuantity) || 0;
     if (!formName.trim() || isNaN(price) || price <= 0) return;
-    const data: { name: string; specification?: string; unit: string; quantity: number; price: number; createdAt?: string } = { name: formName.trim(), unit: formUnit, quantity, price };
+    const data: { name: string; specification?: string; unit: string; store?: string; quantity: number; price: number; createdAt?: string } = { name: formName.trim(), unit: formUnit, quantity, price };
     if (formSpecification.trim()) {
       data.specification = formSpecification.trim();
+    }
+    if (formStore && formStore !== "none") {
+      data.store = formStore;
     }
     if (formDate) {
       data.createdAt = new Date(formDate).toISOString();
@@ -206,7 +213,8 @@ export default function Products() {
     const price = Math.round(parseBRL(formPrice) * 100);
     const quantity = parseInt(formQuantity) || 0;
     if (!formName.trim() || isNaN(price) || price <= 0) return;
-    updateMutation.mutate({ id: editProduct.id, data: { name: formName.trim(), specification: formSpecification.trim() || undefined, unit: formUnit, quantity, price } });
+    const storeVal = formStore && formStore !== "none" ? formStore : null;
+    updateMutation.mutate({ id: editProduct.id, data: { name: formName.trim(), specification: formSpecification.trim() || undefined, unit: formUnit, store: storeVal, quantity, price } });
   };
 
   const totalProducts = products.length;
@@ -299,7 +307,14 @@ export default function Products() {
                       <div className="p-2 rounded-lg bg-primary/10 text-primary">
                         <Package className="w-4 h-4" />
                       </div>
-                      <span className="font-medium" data-testid={`text-product-name-${p.id}`}>{p.name}</span>
+                      <div>
+                        <span className="font-medium" data-testid={`text-product-name-${p.id}`}>{p.name}</span>
+                        {p.store && (
+                          <span className="ml-2 text-xs text-muted-foreground" data-testid={`text-product-store-${p.id}`}>
+                            {getStoreLabel(p.store)}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground text-sm" data-testid={`text-product-spec-${p.id}`}>
@@ -372,7 +387,14 @@ export default function Products() {
                     <Package className="w-4 h-4" />
                   </div>
                   <div className="min-w-0">
-                    <p className="font-medium truncate" data-testid={`text-product-name-${p.id}`}>{p.name}</p>
+                    <p className="font-medium truncate" data-testid={`text-product-name-${p.id}`}>
+                      {p.name}
+                      {p.store && (
+                        <span className="ml-1 text-xs text-muted-foreground font-normal">
+                          ({getStoreLabel(p.store)})
+                        </span>
+                      )}
+                    </p>
                     {p.specification && (
                       <p className="text-xs text-muted-foreground mt-0.5" data-testid={`text-product-spec-${p.id}`}>{p.specification}</p>
                     )}
@@ -462,6 +484,22 @@ export default function Products() {
               </div>
             </div>
             <div className="space-y-2">
+              <Label>Loja / Origem</Label>
+              <Select value={formStore} onValueChange={setFormStore}>
+                <SelectTrigger data-testid="select-product-store">
+                  <SelectValue placeholder="Selecionar loja..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhuma</SelectItem>
+                  {STORE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value} data-testid={`select-product-store-${opt.value}`}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="create-product-price">Preco Sugerido (R$)</Label>
               <CurrencyInput id="create-product-price" value={formPrice} onChange={setFormPrice} data-testid="input-product-price" />
             </div>
@@ -512,6 +550,22 @@ export default function Products() {
                 <Label htmlFor="edit-product-qty">Quantidade</Label>
                 <Input id="edit-product-qty" type="number" min="0" value={formQuantity} onChange={(e) => setFormQuantity(e.target.value)} data-testid="input-edit-product-quantity" />
               </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Loja / Origem</Label>
+              <Select value={formStore} onValueChange={setFormStore}>
+                <SelectTrigger data-testid="select-edit-product-store">
+                  <SelectValue placeholder="Selecionar loja..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhuma</SelectItem>
+                  {STORE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="edit-product-price">Preco Sugerido (R$)</Label>

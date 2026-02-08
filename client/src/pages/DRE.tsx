@@ -7,8 +7,9 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarDays, FileDown, Mail, TrendingUp, TrendingDown, ArrowDown, ArrowUp } from "lucide-react";
+import { CalendarDays, FileDown, Mail, TrendingUp, TrendingDown, ArrowDown, ArrowUp, Store } from "lucide-react";
 import { generateDREPDF, openEmailDRE } from "@/lib/pdf-generator";
+import { STORE_OPTIONS, getStoreLabel } from "@/components/CreateTransactionDialog";
 
 const MONTH_NAMES = [
   "Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho",
@@ -30,6 +31,7 @@ export default function DRE() {
 
   const [selectedYear, setSelectedYear] = useState<string>("all");
   const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [selectedStore, setSelectedStore] = useState<string>("all");
 
   const availableYears = useMemo(() => {
     if (!transactions) return [];
@@ -62,22 +64,29 @@ export default function DRE() {
     setSelectedMonth("all");
   }
 
-  const filterLabel = monthFilter
-    ? monthFilter.month !== null
-      ? `${MONTH_NAMES[monthFilter.month]} ${monthFilter.year}`
-      : `${monthFilter.year}`
-    : "Todos os periodos";
+  const storeLabel = selectedStore !== "all" ? getStoreLabel(selectedStore) : null;
+
+  const filterLabel = [
+    monthFilter
+      ? monthFilter.month !== null
+        ? `${MONTH_NAMES[monthFilter.month]} ${monthFilter.year}`
+        : `${monthFilter.year}`
+      : "Todos os periodos",
+    storeLabel ? `Loja: ${storeLabel}` : null,
+  ].filter(Boolean).join(" | ");
 
   const filteredTransactions = useMemo(() => {
     if (!transactions) return [];
-    if (!monthFilter) return transactions;
     return transactions.filter((tx) => {
-      const d = new Date(tx.date);
-      if (d.getFullYear() !== monthFilter.year) return false;
-      if (monthFilter.month !== null && d.getMonth() !== monthFilter.month) return false;
+      if (monthFilter) {
+        const d = new Date(tx.date);
+        if (d.getFullYear() !== monthFilter.year) return false;
+        if (monthFilter.month !== null && d.getMonth() !== monthFilter.month) return false;
+      }
+      if (selectedStore !== "all" && tx.store !== selectedStore) return false;
       return true;
     });
-  }, [transactions, monthFilter]);
+  }, [transactions, monthFilter, selectedStore]);
 
   const dreData = useMemo(() => {
     const taxRate = settingsData ? parseFloat(settingsData.taxRate) || 0 : 0;
@@ -137,11 +146,11 @@ export default function DRE() {
   const isLoading = txLoading || settingsLoading;
 
   function handleExportPDF() {
-    generateDREPDF(dreLines, filterLabel, dreData);
+    generateDREPDF(dreLines, filterLabel, dreData, storeLabel);
   }
 
   function handleEmail() {
-    openEmailDRE(dreLines, filterLabel, dreData);
+    openEmailDRE(dreLines, filterLabel, dreData, storeLabel);
   }
 
   return (
@@ -154,7 +163,7 @@ export default function DRE() {
           <p className="text-muted-foreground mt-1">Demonstracao do Resultado do Exercicio simplificada.</p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <CalendarDays className="h-4 w-4 text-muted-foreground" />
             <Select value={selectedYear} onValueChange={handleYearChange}>
               <SelectTrigger className="w-[120px]" data-testid="dre-select-year">
@@ -184,6 +193,20 @@ export default function DRE() {
                 </SelectContent>
               </Select>
             )}
+            <Store className="h-4 w-4 text-muted-foreground ml-1" />
+            <Select value={selectedStore} onValueChange={setSelectedStore}>
+              <SelectTrigger className="w-[160px]" data-testid="dre-select-store">
+                <SelectValue placeholder="Loja" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all" data-testid="dre-option-store-all">Todas as lojas</SelectItem>
+                {STORE_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value} data-testid={`dre-option-store-${opt.value}`}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <Button
             variant="outline"
@@ -255,6 +278,11 @@ export default function DRE() {
           <h3 className="font-semibold text-base" data-testid="dre-table-title">
             Demonstrativo - {filterLabel}
           </h3>
+          {storeLabel && (
+            <p className="text-sm font-semibold text-primary mt-1" data-testid="dre-store-label">
+              Loja: {storeLabel}
+            </p>
+          )}
           <p className="text-sm text-muted-foreground mt-0.5">
             Gerado em {format(new Date(), "dd/MM/yyyy HH:mm", { locale: ptBR })}
           </p>

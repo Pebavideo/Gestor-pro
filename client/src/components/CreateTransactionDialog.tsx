@@ -17,6 +17,19 @@ import { Plus, ArrowUpCircle, ArrowDownCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { Product } from "@shared/schema";
 
+export const STORE_OPTIONS = [
+  { value: "fazenda", label: "Fazenda" },
+  { value: "loja_manel", label: "Loja do Manel" },
+  { value: "loja_maria", label: "Loja da Maria" },
+  { value: "mercado_ze", label: "Mercado do Ze" },
+];
+
+export function getStoreLabel(value: string | null | undefined): string {
+  if (!value) return "";
+  const found = STORE_OPTIONS.find((o) => o.value === value);
+  return found ? found.label : value;
+}
+
 const formSchema = z.object({
   description: z.string().min(3, "Descricao muito curta"),
   amount: z.string().refine((val) => {
@@ -24,6 +37,7 @@ const formSchema = z.object({
     return !isNaN(parseFloat(cleaned)) && parseFloat(cleaned) > 0;
   }, "Valor deve ser maior que 0"),
   type: z.enum(["income", "expense"]),
+  store: z.string().optional(),
   productId: z.string().optional(),
   productQty: z.string().optional(),
 });
@@ -79,6 +93,7 @@ export function CreateTransactionDialog() {
       description: "",
       amount: "",
       type: "income",
+      store: "none",
       productId: "",
       productQty: "1",
     },
@@ -98,6 +113,7 @@ export function CreateTransactionDialog() {
       description: string;
       amount: number;
       type: string;
+      store?: string;
       productId?: number;
       productQty?: number;
     } = {
@@ -105,6 +121,10 @@ export function CreateTransactionDialog() {
       amount: amountInCents,
       type: values.type,
     };
+
+    if (values.store && values.store !== "none") {
+      payload.store = values.store;
+    }
 
     if (values.type === "income" && values.productId && values.productId !== "none") {
       payload.productId = parseInt(values.productId);
@@ -175,6 +195,32 @@ export function CreateTransactionDialog() {
                       </div>
                     </RadioGroup>
                   </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="store"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Loja / Origem</FormLabel>
+                  <Select value={field.value || "none"} onValueChange={field.onChange}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-store">
+                        <SelectValue placeholder="Selecionar loja..." />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="none">Nenhuma</SelectItem>
+                      {STORE_OPTIONS.map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value} data-testid={`option-store-${opt.value}`}>
+                          {opt.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}

@@ -349,7 +349,8 @@ interface DREComputedData {
 export function generateDREPDF(
   dreLines: DRELineData[],
   filterLabel: string,
-  dreData: DREComputedData
+  dreData: DREComputedData,
+  storeName?: string | null
 ) {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -364,12 +365,26 @@ export function generateDREPDF(
   doc.setTextColor(100);
   doc.text("DRE - Demonstrativo de Resultados", 14, 28);
 
+  let yOffset = 35;
+
+  if (storeName) {
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(41, 128, 185);
+    doc.text(`Loja: ${storeName}`, 14, yOffset);
+    yOffset += 7;
+  }
+
   doc.setFontSize(9);
-  doc.text(`Periodo: ${filterLabel}`, 14, 35);
-  doc.text(`Gerado em: ${format(now, "dd/MM/yyyy HH:mm", { locale: ptBR })}`, 14, 41);
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(100);
+  doc.text(`Periodo: ${filterLabel}`, 14, yOffset);
+  yOffset += 6;
+  doc.text(`Gerado em: ${format(now, "dd/MM/yyyy HH:mm", { locale: ptBR })}`, 14, yOffset);
+  yOffset += 4;
 
   doc.setDrawColor(200);
-  doc.line(14, 45, pageWidth - 14, 45);
+  doc.line(14, yOffset, pageWidth - 14, yOffset);
 
   const rows = dreLines.map((line) => {
     const indent = line.level === 2 ? "      " : line.level === 1 ? "   " : "";
@@ -378,7 +393,7 @@ export function generateDREPDF(
   });
 
   autoTable(doc, {
-    startY: 50,
+    startY: yOffset + 5,
     head: [["Descricao", "Valor (R$)"]],
     body: rows,
     theme: "plain",
@@ -436,17 +451,23 @@ export function generateDREPDF(
 export function openEmailDRE(
   dreLines: DRELineData[],
   filterLabel: string,
-  dreData: DREComputedData
+  dreData: DREComputedData,
+  storeName?: string | null
 ) {
-  const subject = `DRE - ${filterLabel} - Gestor de Empresas Pro`;
+  const subject = `DRE - ${filterLabel}${storeName ? ` - ${storeName}` : ""} - Gestor de Empresas Pro`;
   const lines = [
     "GESTOR DE EMPRESAS PRO",
     `DRE - Demonstrativo de Resultados`,
+  ];
+  if (storeName) {
+    lines.push(`*** LOJA: ${storeName.toUpperCase()} ***`);
+  }
+  lines.push(
     `Periodo: ${filterLabel}`,
     `Gerado em: ${format(new Date(), "dd/MM/yyyy HH:mm", { locale: ptBR })}`,
     "",
     "=== DEMONSTRATIVO ===",
-  ];
+  );
   for (const dl of dreLines) {
     const indent = dl.level === 2 ? "      " : dl.level === 1 ? "   " : "";
     const val = formatCurrencyPDF(Math.abs(dl.value) / 100);

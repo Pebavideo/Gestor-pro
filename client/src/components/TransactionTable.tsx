@@ -8,9 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CurrencyInput, parseBRL, centsToFormatted } from "@/components/CurrencyInput";
 import { Trash2, ArrowUpRight, ArrowDownRight, Inbox, Pencil, Share2, CheckCircle2, Circle } from "lucide-react";
 import { generateWhatsAppMessage, openWhatsApp } from "@/lib/pdf-generator";
+import { STORE_OPTIONS, getStoreLabel } from "@/components/CreateTransactionDialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Card } from "@/components/ui/card";
@@ -26,19 +28,22 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
   const [editTx, setEditTx] = useState<Transaction | null>(null);
   const [editDescription, setEditDescription] = useState("");
   const [editAmount, setEditAmount] = useState("");
+  const [editStore, setEditStore] = useState("none");
 
   const openEdit = (tx: Transaction) => {
     setEditTx(tx);
     setEditDescription(tx.description);
     setEditAmount(centsToFormatted(tx.amount));
+    setEditStore(tx.store || "none");
   };
 
   const submitEdit = () => {
     if (!editTx) return;
     const amountCents = Math.round(parseBRL(editAmount) * 100);
     if (isNaN(amountCents) || amountCents <= 0) return;
+    const storeVal = editStore && editStore !== "none" ? editStore : null;
     updateMutation.mutate(
-      { id: editTx.id, data: { description: editDescription, amount: amountCents } },
+      { id: editTx.id, data: { description: editDescription, amount: amountCents, store: storeVal } },
       { onSuccess: () => setEditTx(null) }
     );
   };
@@ -102,7 +107,14 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
                     <div className={`p-2 rounded-lg ${tx.type === 'income' ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10' : 'bg-rose-50 text-rose-600 dark:bg-rose-500/10'}`}>
                       {tx.type === 'income' ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
                     </div>
-                    <span className="font-medium text-base" data-testid={`text-description-${tx.id}`}>{tx.description}</span>
+                    <div>
+                      <span className="font-medium text-base" data-testid={`text-description-${tx.id}`}>{tx.description}</span>
+                      {tx.store && (
+                        <span className="ml-2 text-xs text-muted-foreground" data-testid={`text-store-${tx.id}`}>
+                          {getStoreLabel(tx.store)}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </TableCell>
                 <TableCell className="text-muted-foreground font-mono text-sm">
@@ -227,7 +239,14 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2 flex-wrap">
-                  <span className="font-medium text-base truncate" data-testid={`card-text-description-${tx.id}`}>{tx.description}</span>
+                  <span className="font-medium text-base truncate" data-testid={`card-text-description-${tx.id}`}>
+                    {tx.description}
+                    {tx.store && (
+                      <span className="ml-1 text-xs text-muted-foreground font-normal">
+                        ({getStoreLabel(tx.store)})
+                      </span>
+                    )}
+                  </span>
                   <Badge
                     variant="secondary"
                     className={`
@@ -362,6 +381,22 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
                 onChange={setEditAmount}
                 data-testid="input-edit-transaction-amount"
               />
+            </div>
+            <div className="space-y-2">
+              <Label>Loja / Origem</Label>
+              <Select value={editStore} onValueChange={setEditStore}>
+                <SelectTrigger data-testid="select-edit-store">
+                  <SelectValue placeholder="Selecionar loja..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhuma</SelectItem>
+                  {STORE_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>

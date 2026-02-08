@@ -9,6 +9,7 @@ export const transactions = pgTable("transactions", {
   description: text("description").notNull(),
   amount: integer("amount").notNull(),
   type: text("type").notNull(),
+  store: text("store"),
   userId: varchar("user_id").notNull(),
   date: timestamp("date").defaultNow().notNull(),
   reconciled: integer("reconciled").notNull().default(0),
@@ -36,6 +37,7 @@ export const products = pgTable("products", {
   name: text("name").notNull(),
   specification: text("specification"),
   unit: text("unit").notNull().default("UN"),
+  store: text("store"),
   quantity: integer("quantity").notNull().default(0),
   price: integer("price").notNull(),
   userId: varchar("user_id").notNull(),
@@ -55,6 +57,7 @@ export const insertProductSchema = createInsertSchema(products).pick({
   name: true,
   specification: true,
   unit: true,
+  store: true,
   quantity: true,
   price: true,
   createdAt: true,
@@ -70,6 +73,7 @@ export const insertTransactionSchema = createInsertSchema(transactions).pick({
   description: true,
   amount: true,
   type: true,
+  store: true,
 });
 
 export const insertSettingsSchema = createInsertSchema(settings).pick({
