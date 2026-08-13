@@ -107,7 +107,7 @@ export function CreateTransactionDialog() {
   const watchIsRecurring = form.watch("isRecurring");
 
   const selectedProduct = watchProductId && watchProductId !== "none"
-    ? products.find((p) => p.id === parseInt(watchProductId))
+    ? products.find((p) => p.id === watchProductId)
     : null;
 
   function onSubmit(values: z.infer<typeof formSchema>) {
@@ -145,7 +145,7 @@ export function CreateTransactionDialog() {
     }
 
     if (values.type === "income" && values.productId && values.productId !== "none") {
-      payload.productId = parseInt(values.productId);
+      payload.productId = values.productId;
       payload.productQty = parseInt(values.productQty || "1") || 1;
     }
 
@@ -155,7 +155,7 @@ export function CreateTransactionDialog() {
   function onProductSelect(productId: string) {
     form.setValue("productId", productId);
     if (productId && productId !== "none") {
-      const product = products.find((p) => p.id === parseInt(productId));
+      const product = products.find((p) => p.id === productId);
       if (product) {
         form.setValue("description", `Venda - ${product.name}`);
         form.setValue("amount", formatBRL(product.price / 100));

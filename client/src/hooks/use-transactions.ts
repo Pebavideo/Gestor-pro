@@ -68,7 +68,7 @@ export function useUpdateTransaction() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<InsertTransaction> }) => {
+    mutationFn: async ({ id, data }: { id: string; data: Partial<InsertTransaction> }) => {
       const res = await fetch(`/api/transactions/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -105,7 +105,7 @@ export function useDeleteTransaction() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (id: number) => {
+    mutationFn: async (id: string) => {
       const url = buildUrl(api.transactions.delete.path, { id });
       const res = await fetch(url, { method: api.transactions.delete.method, credentials: "include" });
       if (res.status === 403) {
@@ -136,7 +136,7 @@ export function useToggleReconciled() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (id: number) => {
+    mutationFn: async (id: string) => {
       const res = await fetch(`/api/transactions/${id}/reconcile`, {
         method: "PATCH",
         credentials: "include",
@@ -162,7 +162,7 @@ export function useMarkAsPaid() {
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async ({ id, paymentDate }: { id: number; paymentDate?: string }) => {
+    mutationFn: async ({ id, paymentDate }: { id: string; paymentDate?: string }) => {
       const res = await fetch(`/api/transactions/${id}/mark-paid`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },

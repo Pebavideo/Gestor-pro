@@ -111,7 +111,7 @@ export default function TeamManagement() {
   });
 
   const editMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: EmployeeFormData }) => {
+    mutationFn: async ({ id, data }: { id: string; data: EmployeeFormData }) => {
       const salaryInCents = Math.round(parseBRL(data.salary) * 100);
       const res = await fetch(`/api/employees/${id}`, {
         method: "PATCH",
@@ -136,7 +136,7 @@ export default function TeamManagement() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
+    mutationFn: async (id: string) => {
       const res = await fetch(`/api/employees/${id}`, {
         method: "DELETE",
         credentials: "include",
@@ -177,7 +177,7 @@ export default function TeamManagement() {
   });
 
   const payEmployeeMutation = useMutation({
-    mutationFn: async (employeeId: number) => {
+    mutationFn: async (employeeId: string) => {
       const res = await fetch(`/api/employees/${employeeId}/pay`, {
         method: "POST",
         credentials: "include",

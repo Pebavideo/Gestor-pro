@@ -27,6 +27,9 @@ export default defineConfig({
     },
   },
   root: path.resolve(import.meta.dirname, "client"),
+  // O .env fica na raiz do repo (mesmo arquivo usado pelo dotenv no
+  // servidor); sem isso o Vite so procuraria dentro de client/.
+  envDir: import.meta.dirname,
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,

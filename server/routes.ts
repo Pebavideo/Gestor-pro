@@ -5,6 +5,7 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import { insertEmployeeSchema, insertProductSchema } from "@shared/schema";
 import { setupAuth, registerAuthRoutes, isAuthenticated, getUserId } from "./auth";
+import { db } from "./firebase";
 
 async function getCtx(req: Request): Promise<UserContext> {
   const userId = getUserId(req);
@@ -14,11 +15,7 @@ async function getCtx(req: Request): Promise<UserContext> {
 async function requireVerified(req: Request, res: Response, next: NextFunction) {
   const userId = getUserId(req);
   if (!userId) return res.status(401).json({ message: "Nao autenticado." });
-  const { db } = await import("./db");
-  const { users } = await import("@shared/schema");
-  const { eq } = await import("drizzle-orm");
-  const [user] = await db.select().from(users).where(eq(users.id, userId));
-  if (!user || !user.emailVerified) {
+  if (!req.userEmailVerified) {
     return res.status(403).json({ message: "E-mail nao verificado." });
   }
   next();
@@ -73,9 +70,9 @@ export async function registerRoutes(
       const input = api.transactions.create.input.parse(txData);
 
       if (productId && input.type === "income") {
-        const pid = typeof productId === "number" ? productId : parseInt(productId);
+        const pid = String(productId);
         const qty = typeof productQty === "number" ? productQty : parseInt(productQty) || 1;
-        if (isNaN(pid) || pid <= 0) {
+        if (!pid.trim()) {
           return res.status(400).json({ message: "ID do produto invalido." });
         }
         if (isNaN(qty) || qty <= 0) {
@@ -107,8 +104,8 @@ export async function registerRoutes(
 
   app.patch("/api/transactions/:id", isAuthenticated, requireVerified, requireMasterOrGerente, async (req, res) => {
     try {
-      const id = parseInt(req.params.id as string);
-      if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
+      const id = req.params.id as string;
+      if (!id) return res.status(404).json({ message: "ID invalido" });
       const ctx = await getCtx(req);
 
       const body = { ...req.body };
@@ -132,8 +129,8 @@ export async function registerRoutes(
   });
 
   app.patch("/api/transactions/:id/mark-paid", isAuthenticated, requireVerified, requireMasterOrGerente, async (req, res) => {
-    const id = parseInt(req.params.id as string);
-    if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
+    const id = req.params.id as string;
+    if (!id) return res.status(404).json({ message: "ID invalido" });
     const ctx = await getCtx(req);
     const paymentDate = req.body.paymentDate ? new Date(req.body.paymentDate) : new Date();
     const updated = await storage.markAsPaid(id, ctx, paymentDate);
@@ -142,8 +139,8 @@ export async function registerRoutes(
   });
 
   app.patch("/api/transactions/:id/reconcile", isAuthenticated, requireVerified, requireMasterOrGerente, async (req, res) => {
-    const id = parseInt(req.params.id as string);
-    if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
+    const id = req.params.id as string;
+    if (!id) return res.status(404).json({ message: "ID invalido" });
     const ctx = await getCtx(req);
     const updated = await storage.toggleReconciled(id, ctx);
     if (!updated) return res.status(404).json({ message: "Transacao nao encontrada" });
@@ -157,7 +154,8 @@ export async function registerRoutes(
       if (!Array.isArray(rows) || rows.length === 0) {
         return res.status(400).json({ message: "Nenhum dado encontrado no arquivo." });
       }
-      const created: any[] = [];
+      const transactionsCol = db.collection("transactions");
+      const rowsToInsert: { ref: FirebaseFirestore.DocumentReference; data: Record<string, unknown> }[] = [];
       for (const row of rows) {
         const description = String(row.description || row.descricao || row.historico || "Importacao CSV").trim();
 
@@ -195,16 +193,33 @@ export async function registerRoutes(
         const category = row.category || row.categoria || null;
         const storeVal = ctx.role !== "master" && ctx.store ? ctx.store : (row.store || row.loja || null);
 
-        const [tx] = await (await import("./db")).db
-          .insert((await import("@shared/schema")).transactions)
-          .values({
-            description, amount, type, category, store: storeVal, userId: ctx.userId, date: dateVal,
+        rowsToInsert.push({
+          ref: transactionsCol.doc(),
+          data: {
+            description, amount, type, category, store: storeVal || null, userId: ctx.userId, date: dateVal,
             status: "pago",
             paymentDate: dateVal,
-          })
-          .returning();
-        created.push(tx);
+            dueDate: null,
+            isRecurring: 0,
+            recurrenceFrequency: null,
+            recurrenceCount: null,
+            recurrenceGroupId: null,
+            reconciled: 0,
+          },
+        });
       }
+
+      // Firestore permite no maximo 500 operacoes por batch.
+      for (let i = 0; i < rowsToInsert.length; i += 500) {
+        const chunk = rowsToInsert.slice(i, i + 500);
+        const batch = db.batch();
+        for (const { ref, data } of chunk) {
+          batch.set(ref, data);
+        }
+        await batch.commit();
+      }
+
+      const created = rowsToInsert;
       res.status(201).json({ message: `${created.length} transacao(es) importada(s) com sucesso.`, count: created.length });
     } catch (err) {
       console.error("CSV import error:", err);
@@ -213,8 +228,8 @@ export async function registerRoutes(
   });
 
   app.delete(api.transactions.delete.path, isAuthenticated, requireVerified, requireMasterOrGerente, async (req, res) => {
-    const id = parseInt(req.params.id as string);
-    if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
+    const id = req.params.id as string;
+    if (!id) return res.status(404).json({ message: "ID invalido" });
     
     const ctx = await getCtx(req);
     const deleted = await storage.deleteTransaction(id, ctx);
@@ -300,8 +315,8 @@ export async function registerRoutes(
 
   app.patch("/api/user/profile", isAuthenticated, requireVerified, async (req, res) => {
     const userId = getUserId(req);
-    const { cnpjCpf, companyName, firstName, lastName } = req.body;
-    await storage.updateUserProfile(userId, { cnpjCpf, companyName, firstName, lastName });
+    const { cnpjCpf, companyName, firstName, lastName, profileImageUrl } = req.body;
+    await storage.updateUserProfile(userId, { cnpjCpf, companyName, firstName, lastName, profileImageUrl });
     res.json({ message: "Perfil atualizado" });
   });
 
@@ -353,8 +368,8 @@ export async function registerRoutes(
 
   app.patch("/api/employees/:id", isAuthenticated, requireVerified, requireMasterOrGerente, async (req, res) => {
     try {
-      const id = parseInt(req.params.id as string);
-      if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
+      const id = req.params.id as string;
+      if (!id) return res.status(404).json({ message: "ID invalido" });
       const ctx = await getCtx(req);
       const { salaryType, store, ...rest } = req.body;
       const input: any = insertEmployeeSchema.partial().omit({ salaryType: true, store: true }).parse(rest);
@@ -379,8 +394,8 @@ export async function registerRoutes(
   });
 
   app.delete("/api/employees/:id", isAuthenticated, requireVerified, requireMasterOrGerente, async (req, res) => {
-    const id = parseInt(req.params.id as string);
-    if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
+    const id = req.params.id as string;
+    if (!id) return res.status(404).json({ message: "ID invalido" });
     const ctx = await getCtx(req);
     const deleted = await storage.deleteEmployee(id, ctx);
     if (!deleted) return res.status(404).json({ message: "Funcionario nao encontrado" });
@@ -388,8 +403,8 @@ export async function registerRoutes(
   });
 
   app.post("/api/employees/:id/pay", isAuthenticated, requireVerified, requireMasterOrGerente, async (req, res) => {
-    const id = parseInt(req.params.id as string);
-    if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
+    const id = req.params.id as string;
+    if (!id) return res.status(404).json({ message: "ID invalido" });
     const ctx = await getCtx(req);
     const tx = await storage.processPayrollForEmployee(id, ctx);
     if (!tx) return res.status(404).json({ message: "Funcionario nao encontrado" });
@@ -433,8 +448,8 @@ export async function registerRoutes(
 
   app.patch("/api/products/:id", isAuthenticated, requireVerified, requireMasterOrGerente, async (req, res) => {
     try {
-      const id = parseInt(req.params.id as string);
-      if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
+      const id = req.params.id as string;
+      if (!id) return res.status(404).json({ message: "ID invalido" });
       const ctx = await getCtx(req);
       const input = insertProductSchema.partial().parse(req.body);
       const product = await storage.updateProduct(id, input, ctx);
@@ -449,8 +464,8 @@ export async function registerRoutes(
   });
 
   app.delete("/api/products/:id", isAuthenticated, requireVerified, requireMasterOrGerente, async (req, res) => {
-    const id = parseInt(req.params.id as string);
-    if (isNaN(id)) return res.status(404).json({ message: "ID invalido" });
+    const id = req.params.id as string;
+    if (!id) return res.status(404).json({ message: "ID invalido" });
     const ctx = await getCtx(req);
     const deleted = await storage.deleteProduct(id, ctx);
     if (!deleted) return res.status(404).json({ message: "Produto nao encontrado" });
@@ -464,21 +479,16 @@ export async function registerRoutes(
       return res.json({ message: "Ja e master", role: "master" });
     }
 
-    const { db } = await import("./db");
-    const { users } = await import("@shared/schema");
-    const { eq, and, ne, sql } = await import("drizzle-orm");
+    // Neste ponto role != "master" (ja tratado acima), entao a contagem
+    // abaixo nunca inclui o usuario atual.
+    const usersCol = db.collection("users");
+    const mastersSnap = await usersCol.where("role", "==", "master").count().get();
 
-    const existingMasters = await db.select({ count: sql<number>`count(*)` })
-      .from(users)
-      .where(and(eq(users.role, "master"), ne(users.id, userId)));
-
-    if (Number(existingMasters[0].count) > 0) {
+    if (mastersSnap.data().count > 0) {
       return res.status(403).json({ message: "Ja existe um Master." });
     }
 
-    await db.update(users)
-      .set({ role: "master" })
-      .where(eq(users.id, userId));
+    await usersCol.doc(userId).update({ role: "master" });
 
     return res.json({ message: "Primeiro usuario promovido a master", role: "master" });
   });

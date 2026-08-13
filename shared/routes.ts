@@ -1,6 +1,6 @@
 
 import { z } from 'zod';
-import { insertTransactionSchema, insertSettingsSchema, transactions, settings } from './schema';
+import { insertTransactionSchema, insertSettingsSchema, type Transaction, type Settings } from './schema';
 
 export const errorSchemas = {
   validation: z.object({
@@ -21,7 +21,7 @@ export const api = {
       method: 'GET' as const,
       path: '/api/transactions' as const,
       responses: {
-        200: z.array(z.custom<typeof transactions.$inferSelect>()),
+        200: z.array(z.custom<Transaction>()),
       },
     },
     create: {
@@ -29,7 +29,7 @@ export const api = {
       path: '/api/transactions' as const,
       input: insertTransactionSchema,
       responses: {
-        201: z.custom<typeof transactions.$inferSelect>(),
+        201: z.custom<Transaction>(),
         400: errorSchemas.validation,
       },
     },
@@ -62,7 +62,7 @@ export const api = {
       method: 'GET' as const,
       path: '/api/settings' as const,
       responses: {
-        200: z.custom<typeof settings.$inferSelect>(),
+        200: z.custom<Settings>(),
       },
     },
     update: {
@@ -70,7 +70,7 @@ export const api = {
       path: '/api/settings' as const,
       input: insertSettingsSchema,
       responses: {
-        200: z.custom<typeof settings.$inferSelect>(),
+        200: z.custom<Settings>(),
         400: errorSchemas.validation,
       },
     },

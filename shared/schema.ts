@@ -1,5 +1,3 @@
-import { pgTable, text, serial, integer, timestamp, numeric, varchar } from "drizzle-orm/pg-core";
-import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
 export * from "./models/auth";
@@ -54,105 +52,105 @@ export function getStoreLabel(value: string | null | undefined): string {
   return found ? found.label : value;
 }
 
-export const transactions = pgTable("transactions", {
-  id: serial("id").primaryKey(),
-  description: text("description").notNull(),
-  amount: integer("amount").notNull(),
-  type: text("type").notNull(),
-  category: text("category"),
-  store: text("store"),
-  status: text("status").notNull().default("pago"),
-  dueDate: timestamp("due_date"),
-  paymentDate: timestamp("payment_date"),
-  isRecurring: integer("is_recurring").notNull().default(0),
-  recurrenceFrequency: text("recurrence_frequency"),
-  recurrenceCount: integer("recurrence_count"),
-  recurrenceGroupId: text("recurrence_group_id"),
-  userId: varchar("user_id").notNull(),
-  date: timestamp("date").defaultNow().notNull(),
-  reconciled: integer("reconciled").notNull().default(0),
-});
+// ---------------------------------------------------------------------------
+// Entidades Firestore. Cada documento vive em sua propria colecao; "id" e o
+// id do documento no Firestore (string), nao mais um serial numerico do
+// Postgres. Campos booleanos continuam representados como numero 0/1, como
+// no schema original, para nao alterar nenhuma comparacao existente no client.
+// ---------------------------------------------------------------------------
 
-export const settings = pgTable("settings", {
-  id: serial("id").primaryKey(),
-  userId: varchar("user_id").notNull().unique(),
-  taxRate: numeric("tax_rate").notNull().default("15"),
-});
+export interface Transaction {
+  id: string;
+  description: string;
+  amount: number;
+  type: string;
+  category: string | null;
+  store: string | null;
+  status: string;
+  dueDate: Date | null;
+  paymentDate: Date | null;
+  isRecurring: number;
+  recurrenceFrequency: string | null;
+  recurrenceCount: number | null;
+  recurrenceGroupId: string | null;
+  userId: string;
+  date: Date;
+  reconciled: number;
+}
 
-export const employees = pgTable("employees", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  position: text("position").notNull(),
-  salary: integer("salary").notNull(),
-  salaryType: text("salary_type").notNull().default("monthly"),
-  store: text("store").notNull().default("fazenda"),
-  userId: varchar("user_id").notNull(),
-  active: integer("active").notNull().default(1),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+export const insertTransactionSchema = z.object({
+  description: z.string(),
+  amount: z.number(),
+  type: z.string(),
+  category: z.string().nullable().optional(),
+  store: z.string().nullable().optional(),
+  status: z.string().default("pago"),
+  dueDate: z.coerce.date().nullable().optional(),
+  paymentDate: z.coerce.date().nullable().optional(),
+  isRecurring: z.number().default(0),
+  recurrenceFrequency: z.string().nullable().optional(),
+  recurrenceCount: z.number().nullable().optional(),
+  recurrenceGroupId: z.string().nullable().optional(),
+  date: z.coerce.date().optional(),
 });
+export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
 
-export const products = pgTable("products", {
-  id: serial("id").primaryKey(),
-  name: text("name").notNull(),
-  specification: text("specification"),
-  unit: text("unit").notNull().default("UN"),
-  store: text("store"),
-  quantity: integer("quantity").notNull().default(0),
-  price: integer("price").notNull(),
-  userId: varchar("user_id").notNull(),
-  active: integer("active").notNull().default(1),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
+export interface Settings {
+  id: string;
+  userId: string;
+  taxRate: string;
+}
+
+export const insertSettingsSchema = z.object({
+  taxRate: z.union([z.string(), z.number()]).transform((v) => String(v)),
 });
+export type InsertSettings = z.infer<typeof insertSettingsSchema>;
 
-export const insertEmployeeSchema = createInsertSchema(employees).pick({
-  name: true,
-  position: true,
-  salary: true,
-  salaryType: true,
-  store: true,
-  createdAt: true,
+export interface Employee {
+  id: string;
+  name: string;
+  position: string;
+  salary: number;
+  salaryType: string;
+  store: string;
+  userId: string;
+  active: number;
+  createdAt: Date;
+}
+
+export const insertEmployeeSchema = z.object({
+  name: z.string(),
+  position: z.string(),
+  salary: z.number(),
+  salaryType: z.string().default("monthly"),
+  store: z.string().default("fazenda"),
+  createdAt: z.coerce.date().optional(),
 });
-
-export const insertProductSchema = createInsertSchema(products).pick({
-  name: true,
-  specification: true,
-  unit: true,
-  store: true,
-  quantity: true,
-  price: true,
-  createdAt: true,
-});
-
-export type Employee = typeof employees.$inferSelect;
 export type InsertEmployee = z.infer<typeof insertEmployeeSchema>;
 
-export type Product = typeof products.$inferSelect;
+export interface Product {
+  id: string;
+  name: string;
+  specification: string | null;
+  unit: string;
+  store: string | null;
+  quantity: number;
+  price: number;
+  userId: string;
+  active: number;
+  createdAt: Date;
+}
+
+export const insertProductSchema = z.object({
+  name: z.string(),
+  specification: z.string().nullable().optional(),
+  unit: z.string().default("UN"),
+  store: z.string().nullable().optional(),
+  quantity: z.number().default(0),
+  price: z.number(),
+  createdAt: z.coerce.date().optional(),
+});
 export type InsertProduct = z.infer<typeof insertProductSchema>;
-
-export const insertTransactionSchema = createInsertSchema(transactions).pick({
-  description: true,
-  amount: true,
-  type: true,
-  category: true,
-  store: true,
-  status: true,
-  dueDate: true,
-  paymentDate: true,
-  isRecurring: true,
-  recurrenceFrequency: true,
-  recurrenceCount: true,
-  recurrenceGroupId: true,
-  date: true,
-});
-
-export const insertSettingsSchema = createInsertSchema(settings).pick({
-  taxRate: true,
-});
-
-export type Transaction = typeof transactions.$inferSelect;
-export type InsertTransaction = z.infer<typeof insertTransactionSchema>;
-export type Settings = typeof settings.$inferSelect;
-export type InsertSettings = z.infer<typeof insertSettingsSchema>;
 
 export type FinancialSummary = {
   totalIncome: number;

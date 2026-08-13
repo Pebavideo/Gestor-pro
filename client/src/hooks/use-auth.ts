@@ -1,4 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { signOut } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 
 interface AuthUser {
   id: string;
@@ -65,7 +67,10 @@ export function useAuth() {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+      // Best-effort: revoga o refresh token no servidor antes de encerrar a
+      // sessao localmente (a fonte da verdade do login e o Firebase Auth).
+      await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
+      await signOut(auth);
     },
     onSuccess: () => {
       queryClient.setQueryData(["/api/auth/user"], null);

@@ -1,38 +1,51 @@
 import type { Express, Request, Response, NextFunction } from "express";
-import session from "express-session";
-import connectPgSimple from "connect-pg-simple";
-import bcrypt from "bcrypt";
-import { db } from "./db";
-import { users } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { adminAuth, db } from "./firebase";
 
-const PgSession = connectPgSimple(session);
+const usersCol = () => db.collection("users");
+
+declare global {
+  namespace Express {
+    interface Request {
+      userId?: string;
+      userEmailVerified?: boolean;
+    }
+  }
+}
 
 function generateVerificationCode(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-export function setupAuth(app: Express) {
-  app.set("trust proxy", 1);
+// Autenticacao agora e feita pelo Firebase Auth: o client obtem um ID token
+// (via Firebase Web SDK) e manda em "Authorization: Bearer <token>" em toda
+// chamada (isso e feito automaticamente pelo interceptor em
+// client/src/lib/firebase.ts). Nao ha mais sessao/cookie no servidor.
+export function setupAuth(_app: Express) {
+  // Nao ha mais store de sessao para configurar (Firestore e stateless por
+  // requisicao aqui) - mantido como funcao para nao mudar a chamada em
+  // server/routes.ts.
+}
 
-  app.use(
-    session({
-      store: new PgSession({
-        conString: process.env.DATABASE_URL,
-        tableName: "sessions",
-        createTableIfMissing: false,
-      }),
-      secret: process.env.SESSION_SECRET!,
-      resave: false,
-      saveUninitialized: false,
-      cookie: {
-        maxAge: 7 * 24 * 60 * 60 * 1000,
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-      },
+export function isAuthenticated(req: Request, res: Response, next: NextFunction) {
+  const header = req.headers.authorization;
+  const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!token) {
+    return res.status(401).json({ message: "Nao autenticado." });
+  }
+  adminAuth
+    .verifyIdToken(token)
+    .then((decoded) => {
+      req.userId = decoded.uid;
+      req.userEmailVerified = !!decoded.email_verified;
+      next();
     })
-  );
+    .catch(() => {
+      res.status(401).json({ message: "Sessao invalida ou expirada. Faca login novamente." });
+    });
+}
+
+export function getUserId(req: Request): string {
+  return req.userId as string;
 }
 
 export function registerAuthRoutes(app: Express) {
@@ -43,46 +56,55 @@ export function registerAuthRoutes(app: Express) {
       if (!email || !password) {
         return res.status(400).json({ message: "E-mail e senha sao obrigatorios." });
       }
-
       if (password.length < 6) {
         return res.status(400).json({ message: "A senha deve ter pelo menos 6 caracteres." });
       }
 
       const emailLower = email.toLowerCase().trim();
 
-      const [existing] = await db.select().from(users).where(eq(users.email, emailLower));
-      if (existing) {
-        return res.status(409).json({ message: "Este e-mail ja esta cadastrado." });
-      }
-
-      const passwordHash = await bcrypt.hash(password, 10);
       const verificationCode = generateVerificationCode();
       const verificationCodeExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
+
+      let userRecord;
+      try {
+        userRecord = await adminAuth.createUser({
+          email: emailLower,
+          password,
+          emailVerified: false,
+          displayName: [firstName, lastName].filter(Boolean).join(" ") || undefined,
+        });
+      } catch (err: any) {
+        if (err?.code === "auth/email-already-exists") {
+          return res.status(409).json({ message: "Este e-mail ja esta cadastrado." });
+        }
+        throw err;
+      }
+
+      const now = new Date();
+      await usersCol().doc(userRecord.uid).set({
+        email: emailLower,
+        firstName: firstName || null,
+        lastName: lastName || null,
+        profileImageUrl: null,
+        emailVerified: false,
+        role: "operador",
+        store: null,
+        cnpjCpf: null,
+        companyName: null,
+        verificationCode,
+        verificationCodeExpiresAt,
+        createdAt: now,
+        updatedAt: now,
+      });
 
       console.log(`\n========================================`);
       console.log(`CODIGO DE VERIFICACAO para ${emailLower}: ${verificationCode}`);
       console.log(`========================================\n`);
 
-      const [user] = await db
-        .insert(users)
-        .values({
-          email: emailLower,
-          firstName: firstName || null,
-          lastName: lastName || null,
-          passwordHash,
-          emailVerified: false,
-          verificationCode,
-          verificationCodeExpiresAt,
-          role: "operador",
-        })
-        .returning();
-
-      (req.session as any).userId = user.id;
-
       const response: any = {
         message: "Cadastro realizado. Verifique seu e-mail.",
         needsVerification: true,
-        user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, emailVerified: false },
+        user: { id: userRecord.uid, email: emailLower, firstName: firstName || null, lastName: lastName || null, role: "operador", emailVerified: false },
       };
       if (process.env.NODE_ENV !== "production") {
         response.verificationCode = verificationCode;
@@ -94,22 +116,20 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  app.post("/api/auth/verify-email", async (req: Request, res: Response) => {
+  app.post("/api/auth/verify-email", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const userId = (req.session as any)?.userId;
-      if (!userId) {
-        return res.status(401).json({ message: "Sessao expirada. Faca o cadastro novamente." });
-      }
-
+      const userId = getUserId(req);
       const { code } = req.body;
       if (!code) {
         return res.status(400).json({ message: "Codigo de verificacao e obrigatorio." });
       }
 
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
-      if (!user) {
+      const ref = usersCol().doc(userId);
+      const doc = await ref.get();
+      if (!doc.exists) {
         return res.status(404).json({ message: "Usuario nao encontrado." });
       }
+      const user = doc.data()!;
 
       if (user.emailVerified) {
         return res.json({ message: "E-mail ja verificado.", verified: true });
@@ -119,19 +139,18 @@ export function registerAuthRoutes(app: Express) {
         return res.status(400).json({ message: "Codigo de verificacao incorreto." });
       }
 
-      if (user.verificationCodeExpiresAt && new Date() > user.verificationCodeExpiresAt) {
+      const expiresAt = user.verificationCodeExpiresAt?.toDate ? user.verificationCodeExpiresAt.toDate() : user.verificationCodeExpiresAt;
+      if (expiresAt && new Date() > expiresAt) {
         return res.status(400).json({ message: "Codigo expirado. Solicite um novo codigo." });
       }
 
-      await db
-        .update(users)
-        .set({
-          emailVerified: true,
-          verificationCode: null,
-          verificationCodeExpiresAt: null,
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, userId));
+      await adminAuth.updateUser(userId, { emailVerified: true });
+      await ref.update({
+        emailVerified: true,
+        verificationCode: null,
+        verificationCodeExpiresAt: null,
+        updatedAt: new Date(),
+      });
 
       res.json({ message: "E-mail verificado com sucesso!", verified: true });
     } catch (error) {
@@ -140,17 +159,15 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  app.post("/api/auth/resend-code", async (req: Request, res: Response) => {
+  app.post("/api/auth/resend-code", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const userId = (req.session as any)?.userId;
-      if (!userId) {
-        return res.status(401).json({ message: "Sessao expirada. Faca o cadastro novamente." });
-      }
-
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
-      if (!user) {
+      const userId = getUserId(req);
+      const ref = usersCol().doc(userId);
+      const doc = await ref.get();
+      if (!doc.exists) {
         return res.status(404).json({ message: "Usuario nao encontrado." });
       }
+      const user = doc.data()!;
 
       if (user.emailVerified) {
         return res.json({ message: "E-mail ja verificado." });
@@ -163,10 +180,7 @@ export function registerAuthRoutes(app: Express) {
       console.log(`NOVO CODIGO DE VERIFICACAO para ${user.email}: ${verificationCode}`);
       console.log(`========================================\n`);
 
-      await db
-        .update(users)
-        .set({ verificationCode, verificationCodeExpiresAt, updatedAt: new Date() })
-        .where(eq(users.id, userId));
+      await ref.update({ verificationCode, verificationCodeExpiresAt, updatedAt: new Date() });
 
       const response: any = { message: "Novo codigo enviado." };
       if (process.env.NODE_ENV !== "production") {
@@ -179,114 +193,51 @@ export function registerAuthRoutes(app: Express) {
     }
   });
 
-  app.post("/api/auth/login", async (req: Request, res: Response) => {
+  // O login em si (verificacao de senha) e feito no client via Firebase Web
+  // SDK (signInWithEmailAndPassword) - o Admin SDK nao verifica senhas.
+  // Esta rota so existe para invalidar tokens no logout.
+  app.post("/api/auth/logout", async (req: Request, res: Response) => {
     try {
-      const { email, password } = req.body;
-
-      if (!email || !password) {
-        return res.status(400).json({ message: "E-mail e senha sao obrigatorios." });
-      }
-
-      const emailLower = email.toLowerCase().trim();
-      const [user] = await db.select().from(users).where(eq(users.email, emailLower));
-
-      if (!user) {
-        return res.status(401).json({ message: "E-mail ou senha incorretos." });
-      }
-
-      const valid = await bcrypt.compare(password, user.passwordHash);
-      if (!valid) {
-        return res.status(401).json({ message: "E-mail ou senha incorretos." });
-      }
-
-      (req.session as any).userId = user.id;
-
-      if (!user.emailVerified) {
-        const verificationCode = generateVerificationCode();
-        const verificationCodeExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
-
-        console.log(`\n========================================`);
-        console.log(`CODIGO DE VERIFICACAO para ${user.email}: ${verificationCode}`);
-        console.log(`========================================\n`);
-
-        await db
-          .update(users)
-          .set({ verificationCode, verificationCodeExpiresAt, updatedAt: new Date() })
-          .where(eq(users.id, user.id));
-
-        const loginResponse: any = {
-          message: "E-mail nao verificado. Verifique seu e-mail.",
-          needsVerification: true,
-          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, emailVerified: false },
-        };
-        if (process.env.NODE_ENV !== "production") {
-          loginResponse.verificationCode = verificationCode;
+      const header = req.headers.authorization;
+      const token = header?.startsWith("Bearer ") ? header.slice(7) : null;
+      if (token) {
+        const decoded = await adminAuth.verifyIdToken(token).catch(() => null);
+        if (decoded) {
+          await adminAuth.revokeRefreshTokens(decoded.uid).catch(() => {});
         }
-        return res.status(200).json(loginResponse);
       }
-
-      res.json({
-        message: "Login realizado com sucesso.",
-        needsVerification: false,
-        user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, role: user.role, emailVerified: true },
-      });
+      res.json({ message: "Logout realizado." });
     } catch (error) {
-      console.error("Erro no login:", error);
-      res.status(500).json({ message: "Erro interno do servidor." });
+      console.error("Erro no logout:", error);
+      res.status(500).json({ message: "Erro ao encerrar sessao." });
     }
   });
 
-  app.post("/api/auth/logout", (req: Request, res: Response) => {
-    req.session.destroy((err) => {
-      if (err) {
-        console.error("Erro no logout:", err);
-        return res.status(500).json({ message: "Erro ao encerrar sessao." });
-      }
-      res.clearCookie("connect.sid");
-      res.json({ message: "Logout realizado." });
-    });
-  });
-
-  app.get("/api/auth/user", async (req: Request, res: Response) => {
+  app.get("/api/auth/user", isAuthenticated, async (req: Request, res: Response) => {
     try {
-      const userId = (req.session as any)?.userId;
-      if (!userId) {
-        return res.status(401).json({ message: "Nao autenticado." });
-      }
-
-      const [user] = await db.select().from(users).where(eq(users.id, userId));
-      if (!user) {
+      const userId = getUserId(req);
+      const doc = await usersCol().doc(userId).get();
+      if (!doc.exists) {
         return res.status(401).json({ message: "Usuario nao encontrado." });
       }
+      const user = doc.data()!;
 
       res.json({
-        id: user.id,
+        id: userId,
         email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-        store: user.store,
-        cnpjCpf: user.cnpjCpf,
-        companyName: user.companyName,
-        emailVerified: user.emailVerified,
-        profileImageUrl: user.profileImageUrl,
-        createdAt: user.createdAt,
+        firstName: user.firstName ?? null,
+        lastName: user.lastName ?? null,
+        role: user.role ?? "operador",
+        store: user.store ?? null,
+        cnpjCpf: user.cnpjCpf ?? null,
+        companyName: user.companyName ?? null,
+        emailVerified: !!user.emailVerified,
+        profileImageUrl: user.profileImageUrl ?? null,
+        createdAt: user.createdAt?.toDate ? user.createdAt.toDate() : user.createdAt,
       });
     } catch (error) {
       console.error("Erro ao buscar usuario:", error);
       res.status(500).json({ message: "Erro interno do servidor." });
     }
   });
-}
-
-export function isAuthenticated(req: Request, res: Response, next: NextFunction) {
-  const userId = (req.session as any)?.userId;
-  if (!userId) {
-    return res.status(401).json({ message: "Nao autenticado." });
-  }
-  next();
-}
-
-export function getUserId(req: Request): string {
-  return (req.session as any)?.userId;
 }

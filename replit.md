@@ -53,27 +53,34 @@ Financial management dashboard for businesses. Multi-user system with three-tier
 - 2026-02-08: Team Management module with payroll processing
 - 2026-02-07: Custom email/password authentication with email verification
 - 2026-02-07: Translated entire UI to Portuguese
+- 2026-08-13: Migrated database from PostgreSQL/Drizzle to Firebase Firestore
+- 2026-08-13: Migrated authentication from custom bcrypt/session to Firebase Authentication (server still issues the 6-digit verification code UX, backed by Admin SDK)
+- 2026-08-13: Added image compressor + Firebase Storage upload (ImageUploadField), first used for profile photo in ProfileDialog
 
 ## Architecture
 - **Frontend**: React + Vite + TailwindCSS + shadcn/ui
-- **Backend**: Express.js with custom session-based auth
-- **Database**: PostgreSQL via Drizzle ORM
-- **Auth**: Custom email/password with bcrypt hashing + email verification codes
+- **Backend**: Express.js, stateless (Firebase ID token verified per-request, no server session)
+- **Database**: Firebase Firestore via `firebase-admin` (server-only; client never talks to Firestore directly)
+- **Auth**: Firebase Authentication (email/password). Client signs in via Firebase Web SDK and sends `Authorization: Bearer <idToken>` on every API call (attached automatically by a fetch interceptor in `client/src/lib/firebase.ts`). Server verifies the token with the Admin SDK on each request.
+- **Storage**: Firebase Storage for images, uploads always go through the compressor in `client/src/lib/image-compressor.ts` before `uploadCompressedImage`
 
-### Key Tables
-- `users`: id (varchar UUID), email (unique), firstName, lastName, passwordHash, emailVerified, verificationCode, verificationCodeExpiresAt, role ('master'|'gerente'|'operador'), cnpjCpf (nullable), companyName (nullable), store (nullable), createdAt, updatedAt
-- `transactions`: id (serial), description, amount (cents), type, category (nullable), store (nullable), status (pago/pendente), dueDate (nullable), paymentDate (nullable), isRecurring (0/1), recurrenceFrequency (nullable), recurrenceCount (nullable), recurrenceGroupId (nullable), userId, date, reconciled (0/1)
-- `employees`: id (serial), name, position, salary (cents), store (text, default 'fazenda'), userId, active (1/0), createdAt
-- `products`: id (serial), name, specification (text, nullable), unit (text, default 'UN'), quantity, price (cents), userId, active (1/0), createdAt
-- `settings`: id (serial), userId (unique), taxRate
-- `sessions`: sid, sess, expire (for express-session with connect-pg-simple)
+### Key Collections (Firestore)
+- `users` (doc id = Firebase Auth uid): email (unique), firstName, lastName, profileImageUrl, emailVerified, verificationCode, verificationCodeExpiresAt (internal, not returned to client), role ('master'|'gerente'|'operador'), cnpjCpf (nullable), companyName (nullable), store (nullable), createdAt, updatedAt
+- `transactions` (doc id = string): description, amount (cents), type, category (nullable), store (nullable), status (pago/pendente), dueDate (nullable), paymentDate (nullable), isRecurring (0/1), recurrenceFrequency (nullable), recurrenceCount (nullable), recurrenceGroupId (nullable), userId, date, reconciled (0/1)
+- `employees` (doc id = string): name, position, salary (cents), store (default 'fazenda'), userId, active (1/0), createdAt
+- `products` (doc id = string): name, specification (nullable), unit (default 'UN'), quantity, price (cents), userId, active (1/0), createdAt
+- `settings` (doc id = userId): taxRate
+- No `sessions` collection - auth is stateless (Firebase ID tokens), see Auth Flow below.
+- Composite indexes required for the store/role-filtered queries are declared in `firestore.indexes.json` (deploy with `firebase deploy --only firestore:indexes`, or let Firestore's console link auto-create them on first query).
 
 ### Auth Flow
-1. User registers with email, password, name
-2. 6-digit verification code is generated (printed to server console for testing)
-3. User enters code to verify email
+1. User registers with email, password, name - server creates the Firebase Auth user (Admin SDK, `emailVerified:false`) and stores a 6-digit code on the Firestore user doc (printed to server console for testing)
+2. Client immediately signs in with Firebase Web SDK using the same password, establishing a real Firebase session (auto-refreshing ID tokens)
+3. User enters the 6-digit code; server validates it and flips `emailVerified:true` via Admin SDK; client force-refreshes its ID token so the new claim takes effect immediately
 4. Once verified, user can access the dashboard
-5. First verified user is auto-promoted to MASTER
+5. First verified user is auto-promoted to MASTER (`/api/user/make-admin`)
+6. Login is done entirely client-side via Firebase Web SDK (`signInWithEmailAndPassword`) - the server never sees the password
+7. Logout calls `signOut()` client-side and best-effort revokes refresh tokens server-side
 
 ### Store-Based Data Isolation
 - MASTER sees all stores' data (no store filtering)
@@ -87,7 +94,8 @@ Financial management dashboard for businesses. Multi-user system with three-tier
 - **OPERADOR**: Can only create transactions within their assigned store. Read-only for employees and products. Cannot access DRE.
 
 ### Key Components
-- `ProfileDialog` - Edit user profile (name, CNPJ/CPF, company name)
+- `ProfileDialog` - Edit user profile (name, CNPJ/CPF, company name, profile photo via ImageUploadField)
+- `ImageUploadField` - Reusable image picker: compresses (image-compressor.ts) then uploads to Firebase Storage (firebase-storage.ts)
 - `UserManagementDialog` - MASTER-only: assign roles and stores to users
 - `SettingsDialog` - MASTER-only: tax rate configuration
 - `CreateTransactionDialog` - Transaction creation with conditional store selector
@@ -95,24 +103,31 @@ Financial management dashboard for businesses. Multi-user system with three-tier
 ## Project Structure
 - `client/src/` - React frontend (all Portuguese)
 - `client/src/App.tsx` - Main app with sidebar navigation, role-based visibility
-- `client/src/pages/AuthPage.tsx` - Login/Register/Verify unified auth page
+- `client/src/pages/AuthPage.tsx` - Login/Register/Verify unified auth page (Firebase Auth underneath)
 - `client/src/pages/Dashboard.tsx` - Financial dashboard with month filter, CSV import, reconciliation
 - `client/src/pages/DRE.tsx` - DRE income statement with filters, OPERADOR blocked
 - `client/src/pages/Products.tsx` - Product/inventory management
 - `client/src/pages/TeamManagement.tsx` - Employee management with store assignment and payroll
 - `client/src/components/ProfileDialog.tsx` - User profile editing
+- `client/src/components/ImageUploadField.tsx` - Compress + upload image component
 - `client/src/components/UserManagementDialog.tsx` - User role/store management (MASTER only)
 - `client/src/hooks/use-auth.ts` - Auth hook with isMaster/isGerente/isOperador/canManage flags
-- `server/auth.ts` - Custom authentication module (session, routes, middleware)
+- `client/src/lib/firebase.ts` - Firebase Web SDK init + global fetch interceptor (attaches Bearer token)
+- `client/src/lib/image-compressor.ts` - Client-side image compression (browser-image-compression)
+- `client/src/lib/firebase-storage.ts` - Uploads compressed images to Firebase Storage
+- `server/firebase.ts` - Firebase Admin SDK init (Firestore, Auth, Storage)
+- `server/auth.ts` - Firebase Authentication wiring (register/verify/resend/logout routes, bearer-token middleware)
 - `server/routes.ts` - Business API routes with role-based middleware
-- `server/storage.ts` - Database storage layer with UserContext filtering
-- `shared/schema.ts` - Drizzle schema + types + STORE_OPTIONS + CATEGORY_OPTIONS
-- `shared/models/auth.ts` - Users and sessions table definitions + getRoleLabel
+- `server/storage.ts` - Firestore storage layer with UserContext filtering
+- `shared/schema.ts` - Entity types + zod insert schemas + STORE_OPTIONS + CATEGORY_OPTIONS
+- `shared/models/auth.ts` - User type + getRoleLabel
+- `firestore.rules` / `storage.rules` / `firestore.indexes.json` / `firebase.json` - Firebase project config
 
 ## Environment Variables
-- `SESSION_SECRET` - Required for session encryption
-- `DATABASE_URL` - PostgreSQL connection string
+See `.env.example`. Loaded from a local `.env` (via `dotenv`) - required for both server (Admin SDK) and client (Vite `VITE_FIREBASE_*`, see `envDir` in `vite.config.ts`):
+- `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` - Admin SDK service account
+- `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID` - Web SDK config (public)
 
 ## Running
 - `npm run dev` starts Express + Vite on port 5000
-- `npm run db:push` syncs database schema
+- No schema push step - Firestore is schemaless; deploy indexes/rules with the Firebase CLI (`firebase deploy --only firestore:indexes,firestore:rules,storage`) when needed

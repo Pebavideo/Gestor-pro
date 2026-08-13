@@ -3,12 +3,30 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { auth } from "@/lib/firebase";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { Layers, Mail, Lock, User, ArrowLeft } from "lucide-react";
+
+function mapFirebaseAuthError(err: unknown): string {
+  const code = (err as { code?: string })?.code;
+  switch (code) {
+    case "auth/invalid-credential":
+    case "auth/wrong-password":
+    case "auth/user-not-found":
+      return "E-mail ou senha incorretos.";
+    case "auth/too-many-requests":
+      return "Muitas tentativas. Tente novamente em alguns instantes.";
+    case "auth/invalid-email":
+      return "E-mail invalido.";
+    default:
+      return (err as { message?: string })?.message || "Erro ao entrar.";
+  }
+}
 
 const loginSchema = z.object({
   email: z.string().email("E-mail invalido"),
@@ -55,24 +73,18 @@ export default function AuthPage() {
 
   const loginMutation = useMutation({
     mutationFn: async (data: z.infer<typeof loginSchema>) => {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-        credentials: "include",
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.message);
-      return json;
+      try {
+        const cred = await signInWithEmailAndPassword(auth, data.email, data.password);
+        return cred.user;
+      } catch (err) {
+        throw new Error(mapFirebaseAuthError(err));
+      }
     },
-    onSuccess: (data) => {
-      if (data.needsVerification) {
-        setUserEmail(data.user.email);
+    onSuccess: (user) => {
+      if (!user.emailVerified) {
+        setUserEmail(user.email || "");
         setMode("verify");
-        const desc = data.verificationCode
-          ? `Seu codigo de verificacao: ${data.verificationCode}`
-          : "Insira o codigo de verificacao enviado.";
-        toast({ title: "Verificacao necessaria", description: desc });
+        toast({ title: "Verificacao necessaria", description: "Insira o codigo de verificacao enviado." });
       } else {
         queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
         toast({ title: "Bem-vindo!", description: "Login realizado com sucesso." });
@@ -89,10 +101,12 @@ export default function AuthPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
-        credentials: "include",
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.message);
+      // Estabelece a sessao do Firebase no client com a mesma senha
+      // digitada (o servidor ja criou a conta via Admin SDK acima).
+      await signInWithEmailAndPassword(auth, data.email, data.password);
       return json;
     },
     onSuccess: (data) => {
@@ -114,10 +128,14 @@ export default function AuthPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(data),
-        credentials: "include",
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.message);
+      // Forca um ID token novo refletindo emailVerified:true (o token
+      // antigo, emitido antes da verificacao, ficaria com o claim antigo
+      // ate expirar sozinho).
+      await auth.currentUser?.getIdToken(true);
+      await auth.currentUser?.reload();
       return json;
     },
     onSuccess: () => {

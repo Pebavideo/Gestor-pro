@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogS
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ImageUploadField } from "@/components/ImageUploadField";
 import { UserCog } from "lucide-react";
 
 export function ProfileDialog() {
@@ -27,6 +28,23 @@ export function ProfileDialog() {
       setCompanyName(user.companyName || "");
     }
   }, [open, user]);
+
+  async function handlePhotoUploaded(url: string) {
+    try {
+      const res = await fetch("/api/user/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ profileImageUrl: url }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Erro ao salvar foto");
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -65,6 +83,13 @@ export function ProfileDialog() {
         </DialogHeader>
         <DialogScrollArea>
           <div className="space-y-3 pb-4">
+            <ImageUploadField
+              currentUrl={user?.profileImageUrl}
+              fallbackText={(firstName || user?.email || "U").slice(0, 1).toUpperCase()}
+              folder="profile"
+              onUploaded={handlePhotoUploaded}
+              testId="profile-photo"
+            />
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label htmlFor="profile-first-name">Nome</Label>

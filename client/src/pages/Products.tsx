@@ -121,7 +121,7 @@ export default function Products() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number; data: Partial<{ name: string; specification: string; unit: string; store: string | null; quantity: number; price: number }> }) => {
+    mutationFn: async ({ id, data }: { id: string; data: Partial<{ name: string; specification: string; unit: string; store: string | null; quantity: number; price: number }> }) => {
       const res = await fetch(`/api/products/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -145,7 +145,7 @@ export default function Products() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
+    mutationFn: async (id: string) => {
       const res = await fetch(`/api/products/${id}`, { method: "DELETE", credentials: "include" });
       if (!res.ok && res.status !== 204) throw new Error("Erro ao remover produto");
     },
