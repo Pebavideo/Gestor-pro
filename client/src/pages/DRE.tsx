@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CalendarDays, FileDown, Mail, TrendingUp, TrendingDown, ArrowDown, ArrowUp, Store, Eye } from "lucide-react";
+import { CalendarDays, FileDown, Mail, TrendingUp, TrendingDown, ArrowDown, ArrowUp, Store, Eye, AlertTriangle, RotateCcw } from "lucide-react";
 import { generateDREPDF, openEmailDRE } from "@/lib/pdf-generator";
 import { STORE_OPTIONS, getStoreLabel, getCategoryLabel } from "@shared/schema";
 import { useAuth } from "@/hooks/use-auth";
@@ -33,7 +33,7 @@ interface DRELine {
 }
 
 export default function DRE() {
-  const { data: transactions, isLoading: txLoading } = useTransactions();
+  const { data: transactions, isLoading: txLoading, isError: txError, refetch: refetchTx } = useTransactions();
   const { data: settingsData, isLoading: settingsLoading } = useSettings();
   const { isOperador, userStore, isMaster } = useAuth();
 
@@ -135,7 +135,10 @@ export default function DRE() {
       if (tx.type === "income") {
         receitaBruta += tx.amount;
         receitaByCategory[cat] = (receitaByCategory[cat] || 0) + tx.amount;
-      } else {
+      } else if (cat !== "impostos") {
+        // Despesas categorizadas como "Impostos" ja sao cobertas pela linha
+        // automatica "(-) Impostos sobre Receita" abaixo - somar aqui
+        // tambem descontaria o imposto duas vezes do lucro liquido.
         despesaByCategory[cat] = (despesaByCategory[cat] || 0) + tx.amount;
       }
     }
@@ -503,7 +506,7 @@ export default function DRE() {
         </div>
 
         {isComp && (
-          <div className="flex items-center justify-end gap-4 px-4 py-2 bg-muted/20 border-b border-border/30 text-xs text-muted-foreground font-medium">
+          <div className="hidden sm:flex items-center justify-end gap-4 px-4 py-2 bg-muted/20 border-b border-border/30 text-xs text-muted-foreground font-medium">
             <span className="flex-1" />
             <span className="w-[110px] text-right">Realizado</span>
             <span className="w-[110px] text-right">Previsto</span>
@@ -517,8 +520,20 @@ export default function DRE() {
               <div key={i} className="h-10 w-full bg-muted/50 animate-pulse rounded-md" />
             ))}
           </div>
+        ) : txError ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
+            <div className="w-16 h-16 bg-red-100 dark:bg-red-500/10 rounded-full flex items-center justify-center mb-4">
+              <AlertTriangle className="w-8 h-8 text-red-500" />
+            </div>
+            <h3 className="text-lg font-semibold text-foreground">Nao foi possivel carregar os dados da DRE</h3>
+            <p className="max-w-xs mx-auto mt-2">Os valores abaixo podem estar incompletos. Verifique sua conexao e tente novamente.</p>
+            <Button variant="outline" size="sm" className="mt-4" onClick={() => refetchTx()} data-testid="button-retry-dre">
+              <RotateCcw className="h-4 w-4 mr-2" /> Tentar novamente
+            </Button>
+          </div>
         ) : (
-          <div className="divide-y divide-border/50">
+          <>
+          <div className={isComp ? "hidden sm:block divide-y divide-border/50" : "divide-y divide-border/50"}>
             {dreLines.map((line, idx) => {
               const displayValue = line.value;
               const colorClass = line.isTotal
@@ -568,6 +583,49 @@ export default function DRE() {
               );
             })}
           </div>
+
+          {isComp && (
+            <div className="sm:hidden divide-y divide-border/50">
+              {dreLines.map((line, idx) => {
+                const displayValue = line.value;
+                const colorClass = line.isTotal
+                  ? (displayValue >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")
+                  : line.color === "negative"
+                    ? "text-rose-500 dark:text-rose-400"
+                    : line.color === "positive"
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-foreground";
+                const diff = line.previstoValue !== undefined ? line.value - line.previstoValue : 0;
+
+                return (
+                  <div
+                    key={idx}
+                    className={`px-4 py-3 space-y-1.5 ${line.level === 2 ? "pl-8" : line.level === 1 ? "pl-6" : "pl-4"}`}
+                    data-testid={`dre-mobile-line-${idx}`}
+                  >
+                    <span className={`text-sm block ${line.isBold ? "font-semibold" : ""}`}>{line.label}</span>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Realizado</span>
+                      <span className={`font-mono ${colorClass}`}>{formatCurrency(Math.abs(displayValue) / 100)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Previsto</span>
+                      <span className="font-mono text-muted-foreground">
+                        {line.previstoValue !== undefined ? formatCurrency(Math.abs(line.previstoValue) / 100) : "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Diferenca</span>
+                      <span className={`font-mono ${diff > 0 ? "text-emerald-600" : diff < 0 ? "text-rose-600" : "text-muted-foreground"}`}>
+                        {diff !== 0 ? (diff > 0 ? "+" : "") + formatCurrency(Math.abs(diff) / 100) : "-"}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          </>
         )}
 
         {!isLoading && dreData.lucroLiquido !== 0 && (

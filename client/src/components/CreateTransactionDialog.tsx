@@ -52,7 +52,7 @@ export function CreateTransactionDialog() {
     queryKey: ["/api/products"],
     queryFn: async () => {
       const res = await fetch("/api/products", { credentials: "include" });
-      if (!res.ok) return [];
+      if (!res.ok) throw new Error("Erro ao carregar produtos");
       return res.json();
     },
   });
@@ -163,8 +163,18 @@ export function CreateTransactionDialog() {
     }
   }
 
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (!next) {
+      // Sempre limpa o formulario ao fechar (ESC, clique fora, ou
+      // Cancelar) - sem isso o proximo "Nova Transacao" reabria com os
+      // valores antigos ainda preenchidos.
+      form.reset();
+    }
+  }
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger asChild>
         <Button className="rounded-xl px-6" data-testid="button-new-transaction">
           <Plus className="mr-2 h-5 w-5" /> Nova Transacao
@@ -189,7 +199,7 @@ export function CreateTransactionDialog() {
                     <FormControl>
                       <RadioGroup
                         onValueChange={field.onChange}
-                        defaultValue={field.value}
+                        value={field.value}
                         className="grid grid-cols-2 gap-3"
                       >
                         <div>
@@ -498,7 +508,7 @@ export function CreateTransactionDialog() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => setOpen(false)}
+            onClick={() => handleOpenChange(false)}
             data-testid="button-cancel-transaction"
           >
             Cancelar

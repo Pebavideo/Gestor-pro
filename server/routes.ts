@@ -6,6 +6,18 @@ import { z } from "zod";
 import { insertEmployeeSchema, insertProductSchema } from "@shared/schema";
 import { setupAuth, registerAuthRoutes, isAuthenticated, getUserId } from "./auth";
 import { db } from "./firebase";
+import { parseMoneyString, parseLooseDate, normalizeCsvType } from "@shared/csv-utils";
+
+// "yyyy-MM-dd" (vindo de <input type="date">) precisa virar meia-noite
+// LOCAL, nao UTC - senao a data grava um dia antes para quem esta a oeste
+// de UTC. Strings com hora (ex: new Date().toISOString()) sao instantes
+// exatos e continuam usando o parser padrao.
+function parseDateField(value: string): Date {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return parseLooseDate(value) ?? new Date(value);
+  }
+  return new Date(value);
+}
 
 async function getCtx(req: Request): Promise<UserContext> {
   const userId = getUserId(req);
@@ -61,10 +73,10 @@ export async function registerRoutes(
       const { productId, productQty, ...txData } = req.body;
 
       if (txData.dueDate && typeof txData.dueDate === "string") {
-        txData.dueDate = new Date(txData.dueDate);
+        txData.dueDate = parseDateField(txData.dueDate);
       }
       if (txData.paymentDate && typeof txData.paymentDate === "string") {
-        txData.paymentDate = new Date(txData.paymentDate);
+        txData.paymentDate = parseDateField(txData.paymentDate);
       }
 
       const input = api.transactions.create.input.parse(txData);
@@ -110,10 +122,10 @@ export async function registerRoutes(
 
       const body = { ...req.body };
       if (body.dueDate && typeof body.dueDate === "string") {
-        body.dueDate = new Date(body.dueDate);
+        body.dueDate = parseDateField(body.dueDate);
       }
       if (body.paymentDate && typeof body.paymentDate === "string") {
-        body.paymentDate = new Date(body.paymentDate);
+        body.paymentDate = parseDateField(body.paymentDate);
       }
 
       const input = api.transactions.create.input.partial().parse(body);
@@ -132,7 +144,14 @@ export async function registerRoutes(
     const id = req.params.id as string;
     if (!id) return res.status(404).json({ message: "ID invalido" });
     const ctx = await getCtx(req);
-    const paymentDate = req.body.paymentDate ? new Date(req.body.paymentDate) : new Date();
+    let paymentDate = new Date();
+    if (req.body.paymentDate) {
+      const parsed = new Date(req.body.paymentDate);
+      if (isNaN(parsed.getTime())) {
+        return res.status(400).json({ message: "Data de pagamento invalida." });
+      }
+      paymentDate = parsed;
+    }
     const updated = await storage.markAsPaid(id, ctx, paymentDate);
     if (!updated) return res.status(404).json({ message: "Transacao nao encontrada" });
     res.json(updated);
@@ -161,34 +180,17 @@ export async function registerRoutes(
 
         let amount: number;
         if (row.amount_cents !== undefined && row.amount_cents !== null) {
-          amount = Math.abs(Math.round(Number(row.amount_cents)));
+          const cents = Number(row.amount_cents);
+          if (!Number.isFinite(cents)) continue;
+          amount = Math.abs(Math.round(cents));
         } else {
-          let rawAmount = row.amount || row.valor || row.value || "0";
-          if (typeof rawAmount === "string") {
-            rawAmount = rawAmount.replace(/[R$\s]/g, "").replace(/\./g, "").replace(",", ".");
-          }
-          amount = Math.abs(Math.round(parseFloat(rawAmount) * 100));
+          amount = Math.abs(Math.round(parseMoneyString(row.amount || row.valor || row.value) * 100));
         }
-        if (isNaN(amount) || amount === 0) continue;
+        if (amount === 0 || !Number.isSafeInteger(amount)) continue;
 
-        let type = "expense";
-        if (row.type === "income" || row.tipo === "entrada" || row.tipo === "receita") {
-          type = "income";
-        } else if (row.type === "expense" || row.tipo === "saida" || row.tipo === "despesa") {
-          type = "expense";
-        }
+        const type = normalizeCsvType(row.type, row.tipo) ?? "expense";
 
-        let dateVal = new Date();
-        if (row.date || row.data) {
-          const rawDate = String(row.date || row.data);
-          const parts = rawDate.split("/");
-          if (parts.length === 3) {
-            dateVal = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-          } else {
-            const parsed = new Date(rawDate);
-            if (!isNaN(parsed.getTime())) dateVal = parsed;
-          }
-        }
+        const dateVal = parseLooseDate(row.date || row.data) ?? new Date();
 
         const category = row.category || row.categoria || null;
         const storeVal = ctx.role !== "master" && ctx.store ? ctx.store : (row.store || row.loja || null);
@@ -273,16 +275,21 @@ export async function registerRoutes(
     }
     const txs = await storage.getTransactions(ctx);
     const settings = await storage.getSettings(ctx.userId);
-    const taxRate = parseFloat(settings.taxRate) || 0;
+    const parsedTaxRate = parseFloat(settings.taxRate);
+    const taxRate = Number.isFinite(parsedTaxRate) ? parsedTaxRate : 15;
 
     let totalIncome = 0;
     let totalExpenses = 0;
 
+    // So contabiliza o que ja foi de fato pago/recebido, igual a DRE
+    // (transacoes pendentes nao sao receita/despesa realizada ainda).
     for (const t of txs) {
+      if (t.status !== "pago") continue;
+      const amount = Number.isFinite(t.amount) ? t.amount : 0;
       if (t.type === 'income') {
-        totalIncome += t.amount;
+        totalIncome += amount;
       } else {
-        totalExpenses += t.amount;
+        totalExpenses += amount;
       }
     }
 

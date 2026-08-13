@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogScrollArea } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Plus, Package, Pencil, Trash2, PackageOpen, ShoppingBag, Clock, ArrowDownCircle } from "lucide-react";
+import { Plus, Package, Pencil, Trash2, PackageOpen, ShoppingBag, Clock, ArrowDownCircle, AlertTriangle, RotateCcw } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CurrencyInput, parseBRL, centsToFormatted } from "@/components/CurrencyInput";
@@ -41,7 +41,7 @@ export default function Products() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: products = [], isLoading } = useQuery<Product[]>({
+  const { data: products = [], isLoading, isError, refetch } = useQuery<Product[]>({
     queryKey: ["/api/products"],
     queryFn: async () => {
       const res = await fetch("/api/products", { credentials: "include" });
@@ -218,8 +218,12 @@ export default function Products() {
   };
 
   const totalProducts = products.length;
-  const totalStock = products.reduce((sum, p) => sum + p.quantity, 0);
-  const totalValue = products.reduce((sum, p) => sum + (p.quantity * p.price), 0);
+  const totalStock = products.reduce((sum, p) => sum + (Number.isFinite(p.quantity) ? p.quantity : 0), 0);
+  const totalValue = products.reduce((sum, p) => {
+    const qty = Number.isFinite(p.quantity) ? p.quantity : 0;
+    const price = Number.isFinite(p.price) ? p.price : 0;
+    return sum + qty * price;
+  }, 0);
 
   return (
     <div className="space-y-6">
@@ -277,6 +281,17 @@ export default function Products() {
             <div key={i} className="h-16 w-full bg-muted/50 animate-pulse rounded-xl" />
           ))}
         </div>
+      ) : isError ? (
+        <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
+          <div className="w-16 h-16 bg-red-100 dark:bg-red-500/10 rounded-full flex items-center justify-center mb-4">
+            <AlertTriangle className="w-8 h-8 text-red-500" />
+          </div>
+          <h3 className="text-lg font-semibold text-foreground">Nao foi possivel carregar os produtos</h3>
+          <p className="max-w-xs mx-auto mt-2">Verifique sua conexao e tente novamente.</p>
+          <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()} data-testid="button-retry-products">
+            <RotateCcw className="h-4 w-4 mr-2" /> Tentar novamente
+          </Button>
+        </div>
       ) : products.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
           <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">
@@ -332,7 +347,7 @@ export default function Products() {
                       className={p.quantity <= 0 ? "bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400" : ""}
                       data-testid={`text-product-qty-${p.id}`}
                     >
-                      {p.quantity} {formatUnit(p.unit || "UN")}
+                      {Number.isFinite(p.quantity) ? p.quantity : 0} {formatUnit(p.unit || "UN")}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right font-mono font-medium" data-testid={`text-product-price-${p.id}`}>
@@ -437,7 +452,7 @@ export default function Products() {
                   className={p.quantity <= 0 ? "bg-rose-100 text-rose-700 dark:bg-rose-500/20 dark:text-rose-400" : ""}
                   data-testid={`text-product-qty-${p.id}`}
                 >
-                  {p.quantity} {formatUnit(p.unit || "UN")}
+                  {Number.isFinite(p.quantity) ? p.quantity : 0} {formatUnit(p.unit || "UN")}
                 </Badge>
                 <span className="font-mono font-medium" data-testid={`text-product-price-${p.id}`}>
                   {formatCurrency(p.price / 100)}

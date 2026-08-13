@@ -7,14 +7,17 @@ export const formatCurrency = (value: number) =>
   new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
-  }).format(value);
+  }).format(Number.isFinite(value) ? value : 0);
 
 export function useTransactions() {
   return useQuery({
     queryKey: [api.transactions.list.path],
     queryFn: async () => {
       const res = await fetch(api.transactions.list.path, { credentials: "include" });
-      if (res.status === 401) return [];
+      // Nao mascara 401 como "sem transacoes" - um 401 aqui geralmente e uma
+      // corrida transitoria do token (ver client/src/lib/firebase.ts), e
+      // virar [] silenciosamente ficava cacheado como se fosse dado real
+      // (staleTime e "para sempre" nas queries de leitura).
       if (!res.ok) throw new Error("Failed to fetch transactions");
       return await res.json() as Transaction[];
     },

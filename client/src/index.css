@@ -58,6 +58,27 @@
   --success-foreground: 138 76% 97%;
   --warning: 38 92% 50%;
   --warning-foreground: 48 96% 89%;
+
+  /* Bordas dos cards/popovers - mesmo tom sutil usado em todo o resto do
+     app (--border), consumidas como "hsl(var(--x-border) / <alpha-value>)"
+     pelo tailwind.config.ts. */
+  --card-border: 214 32% 91%;
+  --popover-border: 214 32% 91%;
+
+  /* Bordas para elementos com fundo colorido (primary/secondary/muted/
+     accent/destructive) e para os botoes/badges "outline" - usadas como
+     "var(--x-border)" direto (precisam ser uma cor completa, nao um
+     triplet). Overlay de opacidade baixa: funciona sobre qualquer cor de
+     fundo sem precisar calcular um tom especifico por variante. */
+  --primary-border: hsl(0 0% 0% / 0.1);
+  --secondary-border: hsl(0 0% 0% / 0.08);
+  --muted-border: hsl(0 0% 0% / 0.08);
+  --accent-border: hsl(0 0% 0% / 0.08);
+  --destructive-border: hsl(0 0% 0% / 0.15);
+  --sidebar-primary-border: hsl(0 0% 0% / 0.1);
+  --sidebar-accent-border: hsl(0 0% 0% / 0.08);
+  --button-outline: hsl(var(--border));
+  --badge-outline: hsl(var(--border));
 }
 
 .dark {
@@ -98,6 +119,19 @@
   --sidebar-primary-foreground: 222 47.4% 11.2%;
   --sidebar-accent: 217 32.6% 17.5%;
   --sidebar-accent-foreground: 210 40% 98%;
+
+  --card-border: 217 32.6% 17.5%;
+  --popover-border: 217 32.6% 17.5%;
+
+  --primary-border: hsl(0 0% 100% / 0.14);
+  --secondary-border: hsl(0 0% 100% / 0.1);
+  --muted-border: hsl(0 0% 100% / 0.1);
+  --accent-border: hsl(0 0% 100% / 0.1);
+  --destructive-border: hsl(0 0% 100% / 0.16);
+  --sidebar-primary-border: hsl(0 0% 100% / 0.14);
+  --sidebar-accent-border: hsl(0 0% 100% / 0.1);
+  --button-outline: hsl(var(--border));
+  --badge-outline: hsl(var(--border));
 }
 
 @layer base {
@@ -122,6 +156,43 @@
 @layer utilities {
   .text-balance {
     text-wrap: balance;
+  }
+
+  /* Feedback visual de toque/hover para Button e Badge (usadas em toda a
+     cva base desses componentes). Sem isso nenhum botao dava qualquer
+     sinal visual de ter sido tocado/clicado. Overlay em cima do proprio
+     elemento, na cor do texto (funciona em qualquer fundo), sem interferir
+     no clique (pointer-events: none). */
+  .hover-elevate,
+  .active-elevate-2,
+  .toggle-elevate {
+    position: relative;
+  }
+
+  .hover-elevate::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+    pointer-events: none;
+    background-color: currentColor;
+    opacity: 0;
+    transition: opacity 0.15s ease;
+  }
+
+  .hover-elevate:hover::after {
+    opacity: 0.06;
+  }
+
+  .active-elevate-2:active::after {
+    opacity: 0.12;
+  }
+
+  .toggle-elevate[data-state="on"]::after,
+  .toggle-elevate[data-state="checked"]::after,
+  .toggle-elevate[aria-pressed="true"]::after {
+    opacity: 0.1;
   }
   
   /* Modern Glass Effect */

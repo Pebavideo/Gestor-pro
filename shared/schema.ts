@@ -78,9 +78,15 @@ export interface Transaction {
   reconciled: number;
 }
 
+// Valor maximo sensato para qualquer campo monetario (R$ 1 bilhao em
+// centavos) - bloqueia lixo tipo "1e308" vindo de CSV/entrada manual sem
+// limitar nenhum uso real. z.number().int() ja rejeita NaN/Infinity.
+const MAX_CENTS = 100_000_000_000;
+const money = () => z.number().int().nonnegative().max(MAX_CENTS);
+
 export const insertTransactionSchema = z.object({
   description: z.string(),
-  amount: z.number(),
+  amount: money(),
   type: z.string(),
   category: z.string().nullable().optional(),
   store: z.string().nullable().optional(),
@@ -102,7 +108,12 @@ export interface Settings {
 }
 
 export const insertSettingsSchema = z.object({
-  taxRate: z.union([z.string(), z.number()]).transform((v) => String(v)),
+  taxRate: z.union([z.string(), z.number()])
+    .transform((v) => String(v))
+    .refine((v) => {
+      const n = parseFloat(v);
+      return Number.isFinite(n) && n >= 0 && n <= 100;
+    }, { message: "Aliquota de imposto deve ser um numero entre 0 e 100." }),
 });
 export type InsertSettings = z.infer<typeof insertSettingsSchema>;
 
@@ -121,7 +132,7 @@ export interface Employee {
 export const insertEmployeeSchema = z.object({
   name: z.string(),
   position: z.string(),
-  salary: z.number(),
+  salary: money(),
   salaryType: z.string().default("monthly"),
   store: z.string().default("fazenda"),
   createdAt: z.coerce.date().optional(),
@@ -146,8 +157,8 @@ export const insertProductSchema = z.object({
   specification: z.string().nullable().optional(),
   unit: z.string().default("UN"),
   store: z.string().nullable().optional(),
-  quantity: z.number().default(0),
-  price: z.number(),
+  quantity: z.number().int().nonnegative().default(0),
+  price: money(),
   createdAt: z.coerce.date().optional(),
 });
 export type InsertProduct = z.infer<typeof insertProductSchema>;

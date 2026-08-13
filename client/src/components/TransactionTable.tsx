@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { CurrencyInput, parseBRL, centsToFormatted } from "@/components/CurrencyInput";
-import { Trash2, ArrowUpRight, ArrowDownRight, Inbox, Pencil, Share2, CheckCircle2, Circle, DollarSign, AlertTriangle, Clock } from "lucide-react";
+import { Trash2, ArrowUpRight, ArrowDownRight, Inbox, Pencil, Share2, CheckCircle2, Circle, DollarSign, AlertTriangle, Clock, RotateCcw } from "lucide-react";
 import { generateWhatsAppMessage, openWhatsApp } from "@/lib/pdf-generator";
 import { STORE_OPTIONS, getStoreLabel } from "@shared/schema";
 import { CATEGORY_OPTIONS, getCategoryLabel, getStatusLabel } from "@shared/schema";
@@ -70,7 +70,7 @@ function StatusBadge({ tx }: { tx: Transaction }) {
 }
 
 export function TransactionTable({ monthFilter }: { monthFilter?: { year: number; month: number | null } | null }) {
-  const { data: transactions, isLoading } = useTransactions();
+  const { data: transactions, isLoading, isError, refetch } = useTransactions();
   const { mutate: deleteTx, isPending: isDeleting } = useDeleteTransaction();
   const updateMutation = useUpdateTransaction();
   const reconcileMutation = useToggleReconciled();
@@ -128,6 +128,21 @@ export function TransactionTable({ monthFilter }: { monthFilter?: { year: number
         {[1, 2, 3].map((i) => (
           <div key={i} className="h-16 w-full bg-muted/50 animate-pulse rounded-xl" />
         ))}
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
+        <div className="w-16 h-16 bg-red-100 dark:bg-red-500/10 rounded-full flex items-center justify-center mb-4">
+          <AlertTriangle className="w-8 h-8 text-red-500" />
+        </div>
+        <h3 className="text-lg font-semibold text-foreground">Nao foi possivel carregar as transacoes</h3>
+        <p className="max-w-xs mx-auto mt-2">Verifique sua conexao e tente novamente.</p>
+        <Button variant="outline" size="sm" className="mt-4" onClick={() => refetch()} data-testid="button-retry-transactions">
+          <RotateCcw className="h-4 w-4 mr-2" /> Tentar novamente
+        </Button>
       </div>
     );
   }

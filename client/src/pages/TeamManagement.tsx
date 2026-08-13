@@ -15,7 +15,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogS
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Users, Plus, Pencil, Trash2, Inbox, Banknote, DollarSign, FileDown, Printer, Share2, Clock, Mail } from "lucide-react";
+import { Users, Plus, Pencil, Trash2, Inbox, Banknote, DollarSign, FileDown, Printer, Share2, Clock, Mail, AlertTriangle, RotateCcw } from "lucide-react";
 import { generateTeamPDF, generateWhatsAppMessage, openWhatsApp, printTable, openEmailTeam } from "@/lib/pdf-generator";
 import { CurrencyInput, parseBRL, centsToFormatted } from "@/components/CurrencyInput";
 import { format } from "date-fns";
@@ -46,9 +46,24 @@ function useEmployees() {
   });
 }
 
+function EmployeesErrorState({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
+      <div className="w-16 h-16 bg-red-100 dark:bg-red-500/10 rounded-full flex items-center justify-center mb-4">
+        <AlertTriangle className="w-8 h-8 text-red-500" />
+      </div>
+      <h3 className="text-lg font-semibold text-foreground">Nao foi possivel carregar a equipe</h3>
+      <p className="max-w-xs mx-auto mt-2">Verifique sua conexao e tente novamente.</p>
+      <Button variant="outline" size="sm" className="mt-4" onClick={onRetry} data-testid="button-retry-employees">
+        <RotateCcw className="h-4 w-4 mr-2" /> Tentar novamente
+      </Button>
+    </div>
+  );
+}
+
 export default function TeamManagement() {
   const { isMaster, isGerente, isOperador, userStore, canManage } = useAuth();
-  const { data: employees, isLoading } = useEmployees();
+  const { data: employees, isLoading, isError, refetch } = useEmployees();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [createOpen, setCreateOpen] = useState(false);
@@ -431,6 +446,8 @@ export default function TeamManagement() {
             <div key={i} className="h-16 w-full bg-muted/50 animate-pulse rounded-xl" />
           ))}
         </div>
+      ) : isError ? (
+        <EmployeesErrorState onRetry={() => refetch()} />
       ) : !employees || employees.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
           <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mb-4">

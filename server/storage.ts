@@ -61,9 +61,13 @@ const usersCol = () => db.collection("users");
 // o mesmo formato que o client sempre recebeu do Postgres via drizzle.
 function tsToDate(value: unknown): Date | null {
   if (!value) return null;
-  if (value instanceof Date) return value;
-  if (typeof (value as Timestamp).toDate === "function") return (value as Timestamp).toDate();
-  return new Date(value as string);
+  let d: Date;
+  if (value instanceof Date) d = value;
+  else if (typeof (value as Timestamp).toDate === "function") d = (value as Timestamp).toDate();
+  else d = new Date(value as string);
+  // Data invalida vira null (nao um Date "1970"/NaN) para que os "?? new
+  // Date()" dos callers realmente entrem em acao.
+  return isNaN(d.getTime()) ? null : d;
 }
 
 function docToTransaction(doc: DocumentSnapshot<DocumentData>): Transaction {
@@ -71,7 +75,7 @@ function docToTransaction(doc: DocumentSnapshot<DocumentData>): Transaction {
   return {
     id: doc.id,
     description: data.description,
-    amount: data.amount,
+    amount: Number.isFinite(data.amount) ? data.amount : 0,
     type: data.type,
     category: data.category ?? null,
     store: data.store ?? null,
@@ -94,7 +98,7 @@ function docToEmployee(doc: DocumentSnapshot<DocumentData>): Employee {
     id: doc.id,
     name: data.name,
     position: data.position,
-    salary: data.salary,
+    salary: Number.isFinite(data.salary) ? data.salary : 0,
     salaryType: data.salaryType ?? "monthly",
     store: data.store ?? "fazenda",
     userId: data.userId,
@@ -111,8 +115,8 @@ function docToProduct(doc: DocumentSnapshot<DocumentData>): Product {
     specification: data.specification ?? null,
     unit: data.unit ?? "UN",
     store: data.store ?? null,
-    quantity: data.quantity ?? 0,
-    price: data.price,
+    quantity: Number.isFinite(data.quantity) ? data.quantity : 0,
+    price: Number.isFinite(data.price) ? data.price : 0,
     userId: data.userId,
     active: data.active ?? 1,
     createdAt: tsToDate(data.createdAt) ?? new Date(),
@@ -483,8 +487,9 @@ export class DatabaseStorage implements IStorage {
         const data = doc.data()!;
         if (data.userId !== ctx.userId || data.active !== 1) return null;
         if (ctx.role !== "master" && ctx.store && data.store !== ctx.store) return null;
-        if ((data.quantity ?? 0) < quantity) return null;
-        const newQuantity = data.quantity - quantity;
+        const currentQuantity = Number.isFinite(data.quantity) ? data.quantity : 0;
+        if (currentQuantity < quantity) return null;
+        const newQuantity = currentQuantity - quantity;
         tx.update(ref, { quantity: newQuantity });
         return {
           id: doc.id,

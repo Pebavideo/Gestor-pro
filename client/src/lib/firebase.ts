@@ -1,5 +1,6 @@
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth, onIdTokenChanged } from "firebase/auth";
+import { queryClient } from "./queryClient";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -14,10 +15,19 @@ const app = getApps().length ? getApps()[0]! : initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 
-// Mantem um token em cache (renovado automaticamente pelo SDK do Firebase)
-// so para nao precisar de round-trip assincrono quando nao ha usuario ainda.
+// Promise que resolve assim que o Firebase termina de restaurar (ou nao) a
+// sessao persistida no IndexedDB. No primeiro load da pagina, auth.currentUser
+// comeca como null mesmo com uma sessao valida - sem esperar isso, a
+// primeira chamada a /api/auth/user sai sem token, volta 401, e o app
+// deduz "deslogado" antes do Firebase terminar de restaurar a sessao real.
+export const authReady = auth.authStateReady();
+
+// Sempre que o token mudar (login, logout, refresh automatico, ou a
+// restauracao inicial da sessao), busca de novo os dados de auth - assim o
+// app nunca fica "preso" mostrando o estado de antes da mudanca.
 onIdTokenChanged(auth, () => {
-  // no-op: so garante que o SDK mantenha o token sempre fresco em background.
+  queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+  queryClient.invalidateQueries({ queryKey: ["/api/user/role"] });
 });
 
 // Todas as telas/hooks do app usam fetch("/api/...") diretamente (nao passam

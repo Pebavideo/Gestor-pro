@@ -28,7 +28,7 @@ export function UserManagementDialog() {
     queryKey: ["/api/users"],
     queryFn: async () => {
       const res = await fetch("/api/users", { credentials: "include" });
-      if (!res.ok) return [];
+      if (!res.ok) throw new Error("Erro ao carregar usuarios");
       return res.json();
     },
     enabled: open,
@@ -61,11 +61,11 @@ export function UserManagementDialog() {
           Gerenciar Usuarios
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Gerenciar Usuarios e Acessos</DialogTitle>
         </DialogHeader>
-        <DialogScrollArea className="max-h-[60vh]">
+        <DialogScrollArea className="max-h-[60dvh]">
           {isLoading ? (
             <div className="py-8 text-center text-muted-foreground">Carregando...</div>
           ) : allUsers.length === 0 ? (
@@ -75,7 +75,7 @@ export function UserManagementDialog() {
               {allUsers.map((u) => (
                 <div
                   key={u.id}
-                  className="flex items-center gap-2 p-2 rounded-md border border-border/50"
+                  className="flex flex-col sm:flex-row sm:items-center gap-2 p-2 rounded-md border border-border/50"
                   data-testid={`user-row-${u.id}`}
                 >
                   <div className="flex-1 min-w-0">
@@ -89,44 +89,46 @@ export function UserManagementDialog() {
                     </div>
                     <p className="text-xs text-muted-foreground truncate">{u.email}</p>
                   </div>
-                  <Select
-                    value={u.role}
-                    onValueChange={(newRole) => {
-                      const newStore = newRole === "master" ? null : u.store;
-                      updateUserRole(u.id, newRole, newStore);
-                    }}
-                  >
-                    <SelectTrigger className="w-[120px] shrink-0" data-testid={`select-role-${u.id}`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="master">Master</SelectItem>
-                      <SelectItem value="gerente">Gerente</SelectItem>
-                      <SelectItem value="operador">Operador</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  {u.role !== "master" ? (
+                  <div className="flex items-center gap-2">
                     <Select
-                      value={u.store || "none"}
-                      onValueChange={(newStore) => {
-                        updateUserRole(u.id, u.role, newStore === "none" ? null : newStore);
+                      value={u.role}
+                      onValueChange={(newRole) => {
+                        const newStore = newRole === "master" ? null : u.store;
+                        updateUserRole(u.id, newRole, newStore);
                       }}
                     >
-                      <SelectTrigger className="w-[150px] shrink-0" data-testid={`select-store-${u.id}`}>
-                        <SelectValue placeholder="Unidade..." />
+                      <SelectTrigger className="w-full sm:w-[120px] shrink-0" data-testid={`select-role-${u.id}`}>
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">Sem unidade</SelectItem>
-                        {STORE_OPTIONS.map((opt) => (
-                          <SelectItem key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </SelectItem>
-                        ))}
+                        <SelectItem value="master">Master</SelectItem>
+                        <SelectItem value="gerente">Gerente</SelectItem>
+                        <SelectItem value="operador">Operador</SelectItem>
                       </SelectContent>
                     </Select>
-                  ) : (
-                    <div className="w-[150px] shrink-0" />
-                  )}
+                    {u.role !== "master" ? (
+                      <Select
+                        value={u.store || "none"}
+                        onValueChange={(newStore) => {
+                          updateUserRole(u.id, u.role, newStore === "none" ? null : newStore);
+                        }}
+                      >
+                        <SelectTrigger className="w-full sm:w-[150px] shrink-0" data-testid={`select-store-${u.id}`}>
+                          <SelectValue placeholder="Unidade..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Sem unidade</SelectItem>
+                          {STORE_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <div className="hidden sm:block w-[150px] shrink-0" />
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

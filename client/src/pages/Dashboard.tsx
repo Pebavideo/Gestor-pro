@@ -17,6 +17,45 @@ import { Card } from "@/components/ui/card";
 import { generateDashboardPDF, printTable, openEmailDashboard, openEmailDueAccounts } from "@/lib/pdf-generator";
 import { useToast } from "@/hooks/use-toast";
 import { CATEGORY_OPTIONS, getCategoryLabel } from "@shared/schema";
+import { parseMoneyString, parseLooseDate, normalizeCsvType } from "@shared/csv-utils";
+
+// Detecta o delimitador pelo cabecalho (extratos BR normalmente usam ";"
+// porque "," e o separador decimal) e faz o split respeitando campos entre
+// aspas, em vez de partir tudo por [;,] junto - que quebrava valores com
+// virgula decimal em arquivos ja delimitados por ";".
+function detectDelimiter(headerLine: string): string {
+  return headerLine.includes(";") ? ";" : ",";
+}
+
+function splitCsvLine(line: string, delimiter: string): string[] {
+  const result: string[] = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') {
+          cur += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        cur += ch;
+      }
+    } else if (ch === '"') {
+      inQuotes = true;
+    } else if (ch === delimiter) {
+      result.push(cur.trim());
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  result.push(cur.trim());
+  return result;
+}
 
 interface CSVPreviewRow {
   description: string;
@@ -32,8 +71,8 @@ const MONTH_NAMES = [
 ];
 
 export default function Dashboard() {
-  const { data: transactions, isLoading: txLoading } = useTransactions();
-  const { data: settingsData, isLoading: settingsLoading } = useSettings();
+  const { data: transactions, isLoading: txLoading, isError: txError, refetch: refetchTx } = useTransactions();
+  const { data: settingsData, isLoading: settingsLoading, isError: settingsError } = useSettings();
   const { canManage, isOperador } = useAuth();
   const importCSV = useImportCSV();
   const { toast } = useToast();
@@ -79,7 +118,8 @@ export default function Dashboard() {
 
   const summary = useMemo(() => {
     if (!transactions) return { totalIncome: 0, totalExpenses: 0, taxAmount: 0, netProfit: 0, currentTaxRate: 0 };
-    const taxRate = settingsData ? parseFloat(settingsData.taxRate) || 0 : 0;
+    const parsedTaxRate = settingsData ? parseFloat(settingsData.taxRate) : NaN;
+    const taxRate = Number.isFinite(parsedTaxRate) ? parsedTaxRate : 0;
     const filtered = monthFilter
       ? transactions.filter((tx) => {
           const d = new Date(tx.date);
@@ -91,9 +131,13 @@ export default function Dashboard() {
 
     let totalIncome = 0;
     let totalExpenses = 0;
+    // So contabiliza o que ja foi pago/recebido (igual a DRE) - transacoes
+    // pendentes nao sao receita/despesa realizada ainda.
     for (const t of filtered) {
-      if (t.type === "income") totalIncome += t.amount;
-      else totalExpenses += t.amount;
+      if (t.status !== "pago") continue;
+      const amount = Number.isFinite(t.amount) ? t.amount : 0;
+      if (t.type === "income") totalIncome += amount;
+      else totalExpenses += amount;
     }
     const taxAmount = Math.round(totalIncome * (taxRate / 100));
     const netProfit = totalIncome - totalExpenses - taxAmount;
@@ -148,6 +192,10 @@ export default function Dashboard() {
   }
 
   const isLoading = txLoading || settingsLoading;
+  // Enquanto os dados nao carregam de verdade, os cards mostram o skeleton
+  // em vez de um "R$ 0,00" que pareceria um valor real (mesmo tratamento
+  // dado a loading, ja que os dois casos nao tem numero confiavel ainda).
+  const statsUnavailable = isLoading || txError || settingsError;
 
   const filterLabel = monthFilter
     ? monthFilter.month !== null
@@ -186,50 +234,40 @@ export default function Dashboard() {
           toast({ title: "Arquivo vazio", description: "O arquivo CSV nao contem dados.", variant: "destructive" });
           return;
         }
-        const headers = lines[0].split(/[;,]/).map((h) => h.trim().toLowerCase().replace(/"/g, ""));
+        const delimiter = detectDelimiter(lines[0]);
+        const headers = splitCsvLine(lines[0], delimiter).map((h) => h.toLowerCase().replace(/"/g, ""));
         const parsedRows: CSVPreviewRow[] = [];
+        let skippedCount = 0;
         for (let i = 1; i < lines.length; i++) {
-          const values = lines[i].split(/[;,]/).map((v) => v.trim().replace(/"/g, ""));
-          if (values.length < 2) continue;
+          const values = splitCsvLine(lines[i], delimiter).map((v) => v.replace(/"/g, ""));
+          if (values.length < 2) { skippedCount++; continue; }
           const row: any = {};
           headers.forEach((h, idx) => { row[h] = values[idx] || ""; });
 
           const description = String(row.description || row.descricao || row.historico || "Importacao CSV").trim();
-          let rawAmount = row.amount || row.valor || row.value || "0";
-          if (typeof rawAmount === "string") {
-            rawAmount = rawAmount.replace(/[R$\s]/g, "").replace(/\./g, "").replace(",", ".");
-          }
-          const amount = Math.abs(Math.round(parseFloat(rawAmount) * 100));
-          if (isNaN(amount) || amount === 0) continue;
+          const rawAmount = row.amount || row.valor || row.value || "0";
+          const amount = Math.abs(Math.round(parseMoneyString(rawAmount) * 100));
+          if (amount === 0) { skippedCount++; continue; }
 
-          let type: "income" | "expense" = "expense";
-          if (row.type === "income" || row.tipo === "entrada" || row.tipo === "receita") {
-            type = "income";
-          }
-          if (row.type === "expense" || row.tipo === "saida" || row.tipo === "despesa") {
-            type = "expense";
-          }
-          if (!row.type && !row.tipo && parseFloat(String(row.amount || row.valor || row.value || "0").replace(/[R$\s.]/g, "").replace(",", ".")) > 0) {
+          let type: "income" | "expense" = normalizeCsvType(row.type, row.tipo) ?? "expense";
+          if (!row.type && !row.tipo && parseMoneyString(rawAmount) > 0) {
+            // Sem coluna de tipo: usa o sinal do valor (extratos com
+            // valores negativos para saida sao comuns).
             type = "income";
           }
 
-          let dateStr = "";
-          if (row.date || row.data) {
-            const rawDate = String(row.date || row.data);
-            const parts = rawDate.split("/");
-            if (parts.length === 3) {
-              dateStr = `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
-            } else {
-              dateStr = rawDate;
-            }
-          }
-          if (!dateStr) {
-            dateStr = format(new Date(), "yyyy-MM-dd");
-          }
+          const parsedDate = parseLooseDate(row.date || row.data);
+          const dateStr = format(parsedDate ?? new Date(), "yyyy-MM-dd");
 
           const category = row.category || row.categoria || "outros";
 
           parsedRows.push({ description, amount, type, date: dateStr, category });
+        }
+        if (skippedCount > 0) {
+          toast({
+            title: "Algumas linhas foram ignoradas",
+            description: `${skippedCount} linha(s) sem valor valido nao foram importadas.`,
+          });
         }
 
         if (parsedRows.length === 0) {
@@ -392,7 +430,7 @@ export default function Dashboard() {
           colorClass="text-emerald-500"
           trend={filterLabel}
           trendColor="neutral"
-          isLoading={isLoading}
+          isLoading={statsUnavailable}
         />
         <StatsCard
           title="Despesas Totais"
@@ -401,7 +439,7 @@ export default function Dashboard() {
           colorClass="text-rose-500"
           trend={filterLabel}
           trendColor="neutral"
-          isLoading={isLoading}
+          isLoading={statsUnavailable}
         />
         <StatsCard
           title="Impostos"
@@ -410,7 +448,7 @@ export default function Dashboard() {
           colorClass="text-amber-500"
           trend={`Aliquota: ${summary.currentTaxRate}%`}
           trendColor="neutral"
-          isLoading={isLoading}
+          isLoading={statsUnavailable}
         />
         <StatsCard
           title="Lucro Liquido"
@@ -419,7 +457,7 @@ export default function Dashboard() {
           colorClass="text-blue-600"
           trend={filterLabel}
           trendColor="neutral"
-          isLoading={isLoading}
+          isLoading={statsUnavailable}
         />
       </div>
 
@@ -494,7 +532,7 @@ export default function Dashboard() {
               {csvPreview?.length || 0} transacao(es) encontrada(s). Revise, altere categorias/tipo e confirme.
             </DialogDescription>
           </DialogHeader>
-          <DialogScrollArea className="max-h-[55vh]">
+          <DialogScrollArea className="max-h-[55dvh]">
             {csvPreview && csvPreview.length > 0 && (
               <div className="hidden sm:block">
                 <Table>
