@@ -9,6 +9,8 @@ import TeamManagement from "@/pages/TeamManagement";
 import Products from "@/pages/Products";
 import DRE from "@/pages/DRE";
 import AuthPage from "@/pages/AuthPage";
+import Privacy from "@/pages/Privacy";
+import Terms from "@/pages/Terms";
 import NotFound from "@/pages/not-found";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +34,7 @@ import { Layers, LayoutDashboard, Users, Package, LogOut, BarChart3 } from "luci
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { ProfileDialog } from "@/components/ProfileDialog";
 import { UserManagementDialog } from "@/components/UserManagementDialog";
+import { SiteFooter } from "@/components/SiteFooter";
 import { useEffect } from "react";
 import { getStoreLabel } from "@shared/schema";
 import { getRoleLabel } from "@shared/models/auth";
@@ -166,8 +169,8 @@ function AppLayout() {
           <header className="flex items-center gap-2 p-2 border-b border-border/40">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
           </header>
-          <main className="flex-1 overflow-auto">
-            <div className="container mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
+          <main className="flex-1 overflow-auto flex flex-col">
+            <div className="container mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8 flex-1">
               <Switch>
                 <Route path="/" component={Dashboard} />
                 <Route path="/dre" component={DRE} />
@@ -176,6 +179,7 @@ function AppLayout() {
                 <Route component={NotFound} />
               </Switch>
             </div>
+            <SiteFooter />
           </main>
         </div>
       </div>
@@ -184,7 +188,13 @@ function AppLayout() {
 }
 
 function Router() {
+  const [location] = useLocation();
   const { isAuthenticated, isVerified, isLoading } = useAuth();
+
+  // Paginas legais sao publicas - acessiveis mesmo sem login (ex: antes de
+  // se cadastrar), sem esperar o carregamento de autenticacao.
+  if (location === "/privacidade") return <Privacy />;
+  if (location === "/termos") return <Terms />;
 
   if (isLoading) {
     return (

@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
+import { SiteFooter } from "@/components/SiteFooter";
 import { Layers, Mail, Lock, User, ArrowLeft } from "lucide-react";
 
 function mapFirebaseAuthError(err: unknown): string {
@@ -426,6 +427,7 @@ export default function AuthPage() {
           )}
         </Card>
       </main>
+      <SiteFooter />
     </div>
   );
 }
