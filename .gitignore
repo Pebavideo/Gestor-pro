@@ -6,3 +6,12 @@ vite.config.ts.*
 *.tar.gz
 # Replit agent internal state (not project code)
 .local/
+
+# Local environment secrets (Firebase credentials etc.) - never commit
+.env
+.env.local
+*.env
+
+# Firebase service account keys, if ever downloaded into the repo
+*firebase-adminsdk*.json
+serviceAccountKey.json
