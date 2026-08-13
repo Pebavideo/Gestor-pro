@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from "firebase/app";
-import { getAuth, onIdTokenChanged } from "firebase/auth";
+import { getAuth, onIdTokenChanged, GoogleAuthProvider } from "firebase/auth";
 import { queryClient } from "./queryClient";
 
 const firebaseConfig = {
@@ -14,6 +14,12 @@ const firebaseConfig = {
 const app = getApps().length ? getApps()[0]! : initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
+
+// Provider de "Entrar com Google" - forca a tela de selecao de conta
+// sempre (mesmo que so haja uma conta logada no navegador), para o
+// usuario nunca ficar preso na ultima conta usada.
+export const googleProvider = new GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: "select_account" });
 
 // Promise que resolve assim que o Firebase termina de restaurar (ou nao) a
 // sessao persistida no IndexedDB. No primeiro load da pagina, auth.currentUser

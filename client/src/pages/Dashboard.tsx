@@ -70,10 +70,17 @@ const MONTH_NAMES = [
   "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
 ];
 
+// 05:00-11:59 -> Bom dia, 12:00-17:59 -> Boa tarde, 18:00-04:59 -> Boa noite.
+function getGreetingWord(hour: number): string {
+  if (hour >= 5 && hour < 12) return "Bom dia";
+  if (hour >= 12 && hour < 18) return "Boa tarde";
+  return "Boa noite";
+}
+
 export default function Dashboard() {
   const { data: transactions, isLoading: txLoading, isError: txError, refetch: refetchTx } = useTransactions();
   const { data: settingsData, isLoading: settingsLoading, isError: settingsError } = useSettings();
-  const { canManage, isOperador } = useAuth();
+  const { canManage, isOperador, user } = useAuth();
   const importCSV = useImportCSV();
   const { toast } = useToast();
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -196,6 +203,13 @@ export default function Dashboard() {
   // em vez de um "R$ 0,00" que pareceria um valor real (mesmo tratamento
   // dado a loading, ja que os dois casos nao tem numero confiavel ainda).
   const statsUnavailable = isLoading || txError || settingsError;
+
+  // Saudacao dinamica: nome vindo do perfil autenticado (populado a partir
+  // do displayName do Firebase no primeiro login, ex: Google Sign-In).
+  // Sem nome disponivel ainda, cai num titulo generico em vez de "Bom dia,
+  // undefined!".
+  const firstName = user?.firstName?.trim();
+  const greetingTitle = firstName ? `${getGreetingWord(new Date().getHours())}, ${firstName}!` : "Seja bem-vindo!";
 
   const filterLabel = monthFilter
     ? monthFilter.month !== null
@@ -331,8 +345,10 @@ export default function Dashboard() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight" data-testid="text-dashboard-title">Painel Financeiro</h2>
-          <p className="text-muted-foreground mt-1">Acompanhe suas receitas, despesas e resultados.</p>
+          <h2 className="text-2xl font-bold tracking-tight" data-testid="text-dashboard-title">{greetingTitle}</h2>
+          <p className="text-muted-foreground mt-1" data-testid="text-dashboard-subtitle">
+            Seja bem-vindo! O sistema esta pronto para voce iniciar seu trabalho.
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-2">

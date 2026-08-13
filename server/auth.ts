@@ -8,6 +8,12 @@ declare global {
     interface Request {
       userId?: string;
       userEmailVerified?: boolean;
+      // Claims do token do Firebase usadas so para provisionar o perfil no
+      // Firestore no primeiro login (ex: Google Sign-In, que nunca passa
+      // por /api/auth/register) - ver auto-provisionamento em /api/auth/user.
+      userEmail?: string;
+      userName?: string;
+      userPicture?: string;
     }
   }
 }
@@ -37,6 +43,9 @@ export function isAuthenticated(req: Request, res: Response, next: NextFunction)
     .then((decoded) => {
       req.userId = decoded.uid;
       req.userEmailVerified = !!decoded.email_verified;
+      req.userEmail = typeof decoded.email === "string" ? decoded.email : undefined;
+      req.userName = typeof decoded.name === "string" ? decoded.name : undefined;
+      req.userPicture = typeof decoded.picture === "string" ? decoded.picture : undefined;
       next();
     })
     .catch(() => {
@@ -216,10 +225,36 @@ export function registerAuthRoutes(app: Express) {
   app.get("/api/auth/user", isAuthenticated, async (req: Request, res: Response) => {
     try {
       const userId = getUserId(req);
-      const doc = await usersCol().doc(userId).get();
+      const ref = usersCol().doc(userId);
+      let doc = await ref.get();
+
       if (!doc.exists) {
-        return res.status(401).json({ message: "Usuario nao encontrado." });
+        // Primeiro login sem passar por /api/auth/register (Google Sign-In,
+        // por exemplo) - provisiona o perfil agora, usando os dados que ja
+        // vieram verificados no token (e-mail, nome, foto). O e-mail
+        // autenticado no token e a referencia usada para criar o registro
+        // do lojista no Firestore.
+        const fullName = (req.userName || "").trim();
+        const [firstName, ...rest] = fullName ? fullName.split(/\s+/) : [null];
+        const now = new Date();
+        await ref.set({
+          email: req.userEmail || "",
+          firstName: firstName || null,
+          lastName: rest.length ? rest.join(" ") : null,
+          profileImageUrl: req.userPicture || null,
+          emailVerified: !!req.userEmailVerified,
+          role: "operador",
+          store: null,
+          cnpjCpf: null,
+          companyName: null,
+          verificationCode: null,
+          verificationCodeExpiresAt: null,
+          createdAt: now,
+          updatedAt: now,
+        });
+        doc = await ref.get();
       }
+
       const user = doc.data()!;
 
       res.json({

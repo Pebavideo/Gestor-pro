@@ -11,7 +11,21 @@ import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { SiteFooter } from "@/components/SiteFooter";
+import { GoogleSignInButton } from "@/components/GoogleSignInButton";
 import { Layers, Mail, Lock, User, ArrowLeft } from "lucide-react";
+
+function OrDivider() {
+  return (
+    <div className="relative">
+      <div className="absolute inset-0 flex items-center">
+        <span className="w-full border-t border-border" />
+      </div>
+      <div className="relative flex justify-center text-xs uppercase">
+        <span className="bg-card px-2 text-muted-foreground">ou</span>
+      </div>
+    </div>
+  );
+}
 
 function mapFirebaseAuthError(err: unknown): string {
   const code = (err as { code?: string })?.code;
@@ -198,6 +212,9 @@ export default function AuthPage() {
                 <p className="text-sm text-muted-foreground">Insira suas credenciais para acessar o painel.</p>
               </div>
 
+              <GoogleSignInButton testId="button-google-login" />
+              <OrDivider />
+
               <Form {...loginForm}>
                 <form onSubmit={loginForm.handleSubmit((d) => loginMutation.mutate(d))} className="space-y-4">
                   <FormField
@@ -264,6 +281,9 @@ export default function AuthPage() {
                 <h2 className="text-2xl font-bold" data-testid="text-auth-title">Criar Conta</h2>
                 <p className="text-sm text-muted-foreground">Preencha os dados abaixo para se cadastrar.</p>
               </div>
+
+              <GoogleSignInButton label="Cadastrar com Google" testId="button-google-register" />
+              <OrDivider />
 
               <Form {...registerForm}>
                 <form onSubmit={registerForm.handleSubmit((d) => registerMutation.mutate(d))} className="space-y-4">
