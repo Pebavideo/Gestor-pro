@@ -1,4 +1,4 @@
-import { Switch, Route, useLocation, Link } from "wouter";
+import { Switch, Route, Redirect, useLocation, Link } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -9,6 +9,7 @@ import TeamManagement from "@/pages/TeamManagement";
 import Products from "@/pages/Products";
 import DRE from "@/pages/DRE";
 import AuthPage from "@/pages/AuthPage";
+import Admin from "@/pages/Admin";
 import Privacy from "@/pages/Privacy";
 import Terms from "@/pages/Terms";
 import NotFound from "@/pages/not-found";
@@ -30,7 +31,7 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { Layers, LayoutDashboard, Users, Package, LogOut, BarChart3 } from "lucide-react";
+import { Layers, LayoutDashboard, Users, Package, LogOut, BarChart3, ShieldCheck } from "lucide-react";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { ProfileDialog } from "@/components/ProfileDialog";
 import { UserManagementDialog } from "@/components/UserManagementDialog";
@@ -39,7 +40,7 @@ import { getStoreLabel } from "@shared/schema";
 import { getRoleLabel } from "@shared/models/auth";
 
 function AppSidebar() {
-  const { user, isMaster, isGerente, isOperador, role, userStore, logout } = useAuth();
+  const { user, isMaster, isGerente, isOperador, isSuperAdmin, role, userStore, logout } = useAuth();
   const [location, navigate] = useLocation();
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -52,6 +53,7 @@ function AppSidebar() {
     { path: "/dre", label: "DRE", icon: BarChart3, testId: "dre", visible: !isOperador },
     { path: "/produtos", label: "Produtos", icon: Package, testId: "products", visible: true },
     { path: "/equipe", label: "Gestao de Equipe", icon: Users, testId: "team", visible: true },
+    { path: "/admin", label: "Painel Admin", icon: ShieldCheck, testId: "admin", visible: isSuperAdmin },
   ];
 
   const handleNav = (path: string) => {
@@ -138,6 +140,18 @@ function AppSidebar() {
   );
 }
 
+function AdminRoute() {
+  // Guarda de rota no frontend (alem das regras do Firestore, que sao a
+  // linha de defesa de verdade): qualquer um que nao seja o e-mail fixo do
+  // Super Admin e mandado de volta pro painel principal, sem nem tentar
+  // renderizar a tela.
+  const { isSuperAdmin } = useAuth();
+  if (!isSuperAdmin) {
+    return <Redirect to="/" />;
+  }
+  return <Admin />;
+}
+
 function AppLayout() {
   // O primeiro usuario master nao e mais auto-promovido por uma rota de
   // API (nao ha servidor confiavel pra isso sem abrir uma brecha de
@@ -165,6 +179,7 @@ function AppLayout() {
                 <Route path="/dre" component={DRE} />
                 <Route path="/produtos" component={Products} />
                 <Route path="/equipe" component={TeamManagement} />
+                <Route path="/admin" component={AdminRoute} />
                 <Route component={NotFound} />
               </Switch>
             </div>

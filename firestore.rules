@@ -32,6 +32,15 @@ service cloud.firestore {
       return isSignedIn() && myRole() == 'master';
     }
 
+    // Conta do desenvolvedor - camada acima do Master, enxerga todos os
+    // lojistas cadastrados no sistema (Painel Admin, /admin). Fixo por
+    // e-mail direto do token verificado (nao de um campo do Firestore, que
+    // seria menos confiavel). Mantido em sincronia manual com
+    // SUPER_ADMIN_EMAIL em shared/models/auth.ts.
+    function isSuperAdmin() {
+      return isSignedIn() && request.auth.token.email == 'jjoserobertorocharocha@gmail.com';
+    }
+
     // Master + Gerente - mesmo conjunto que "requireMasterOrGerente" tinha
     // no servidor (Operador so cria transacao/produto, nunca edita/exclui).
     function isManager() {
@@ -49,8 +58,10 @@ service cloud.firestore {
     }
 
     match /users/{userId} {
-      allow get: if isSignedIn() && (request.auth.uid == userId || isMaster());
-      allow list: if isMaster();
+      allow get: if isSignedIn() && (request.auth.uid == userId || isMaster() || isSuperAdmin());
+      // Listagem de todos os lojistas: Master (equipe/gerenciamento) ou o
+      // Super Admin (Painel /admin, visao do sistema inteiro).
+      allow list: if isMaster() || isSuperAdmin();
       // Bootstrap do primeiro login (Google Sign-In cria o proprio perfil).
       allow create: if isSignedIn() && request.auth.uid == userId;
       // Cada um edita o proprio perfil (nome, CNPJ, empresa, foto), mas

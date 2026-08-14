@@ -1,9 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { signOut } from "firebase/auth";
-import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { auth, authReady, db } from "@/lib/firebase";
 import { usersCol } from "@/lib/firestore-collections";
-import type { User } from "@shared/models/auth";
+import { SUPER_ADMIN_EMAIL, type User } from "@shared/models/auth";
 
 async function fetchUser(): Promise<User | null> {
   // Espera o Firebase terminar de restaurar a sessao do IndexedDB antes de
@@ -32,10 +32,16 @@ async function fetchUser(): Promise<User | null> {
       store: null,
       cnpjCpf: null,
       companyName: null,
+      active: 1,
+      lastAccessAt: serverTimestamp(),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
     snap = await getDoc(ref);
+  } else {
+    // Marca o acesso (usado pelo Painel Admin) - nao bloqueia o carregamento
+    // do perfil se essa escrita falhar/demorar.
+    updateDoc(doc(db, "users", fbUser.uid), { lastAccessAt: serverTimestamp() }).catch(() => {});
   }
 
   return snap.data() ?? null;
@@ -74,6 +80,9 @@ export function useAuth() {
     isOperador: role === "operador",
     isAdmin: role === "master",
     canManage: role === "master" || role === "gerente",
+    // Camada acima do Master - fixa por e-mail, enxerga todos os lojistas
+    // do sistema (ver shared/models/auth.ts).
+    isSuperAdmin: user?.email === SUPER_ADMIN_EMAIL,
     logout: logoutMutation.mutate,
     isLoggingOut: logoutMutation.isPending,
   };

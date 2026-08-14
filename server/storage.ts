@@ -136,6 +136,8 @@ function docToUser(doc: DocumentSnapshot<DocumentData>): User {
     store: data.store ?? null,
     cnpjCpf: data.cnpjCpf ?? null,
     companyName: data.companyName ?? null,
+    active: data.active ?? 1,
+    lastAccessAt: tsToDate(data.lastAccessAt),
     createdAt: tsToDate(data.createdAt),
     updatedAt: tsToDate(data.updatedAt),
   };

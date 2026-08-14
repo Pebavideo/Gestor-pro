@@ -12,11 +12,20 @@ export interface User {
   store: string | null;
   cnpjCpf: string | null;
   companyName: string | null;
+  active: number;
+  lastAccessAt: Date | null;
   createdAt: Date | null;
   updatedAt: Date | null;
 }
 
 export type UpsertUser = Partial<User> & { id: string; email: string };
+
+// Conta do desenvolvedor - unica com acesso ao Painel Admin (/admin). Fixo
+// por e-mail (nao por role) porque e uma camada acima do Master: enxerga
+// todos os lojistas do sistema, nao so a propria equipe. O mesmo e-mail
+// esta duplicado em firestore.rules (regras nao podem importar deste
+// arquivo) - qualquer mudanca aqui precisa ser espelhada la tambem.
+export const SUPER_ADMIN_EMAIL = "jjoserobertorocharocha@gmail.com";
 
 export const ROLE_OPTIONS = [
   { value: "master", label: "Master" },
