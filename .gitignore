@@ -4,6 +4,9 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+
+# Cache local do Firebase CLI
+.firebase/
 # Replit agent internal state (not project code)
 .local/
 

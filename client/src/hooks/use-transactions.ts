@@ -1,6 +1,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { api, buildUrl } from "@shared/routes";
+import {
+  collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc,
+  query, where, orderBy, writeBatch, runTransaction,
+} from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { transactionsCol, productsCol } from "@/lib/firestore-collections";
+import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { insertTransactionSchema, insertSettingsSchema } from "@shared/schema";
 import type { InsertTransaction, InsertSettings, Transaction, Settings } from "@shared/schema";
 
 export const formatCurrency = (value: number) =>
@@ -9,59 +16,128 @@ export const formatCurrency = (value: number) =>
     currency: "BRL",
   }).format(Number.isFinite(value) ? value : 0);
 
+function friendlyError(err: unknown, permissionMessage: string): string {
+  const code = (err as { code?: string })?.code;
+  if (code === "permission-denied") return permissionMessage;
+  return (err as { message?: string })?.message || "Ocorreu um erro. Tente novamente.";
+}
+
+interface Ctx {
+  userId: string;
+  role: string;
+  store: string | null;
+}
+
+function useCtx(): Ctx | null {
+  const { user, role, userStore } = useAuth();
+  if (!user) return null;
+  return { userId: user.id, role, store: userStore };
+}
+
 export function useTransactions() {
-  return useQuery({
-    queryKey: [api.transactions.list.path],
+  const ctx = useCtx();
+  return useQuery<Transaction[]>({
+    queryKey: ["transactions", ctx?.userId, ctx?.role, ctx?.store],
     queryFn: async () => {
-      const res = await fetch(api.transactions.list.path, { credentials: "include" });
-      // Nao mascara 401 como "sem transacoes" - um 401 aqui geralmente e uma
-      // corrida transitoria do token (ver client/src/lib/firebase.ts), e
-      // virar [] silenciosamente ficava cacheado como se fosse dado real
-      // (staleTime e "para sempre" nas queries de leitura).
-      if (!res.ok) throw new Error("Failed to fetch transactions");
-      return await res.json() as Transaction[];
+      if (!ctx) return [];
+      const clauses = [where("userId", "==", ctx.userId)];
+      if (ctx.role !== "master") {
+        clauses.push(where("store", "==", ctx.store || "__none__"));
+      }
+      const q = query(transactionsCol(), ...clauses, orderBy("date", "desc"));
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => d.data());
     },
+    enabled: !!ctx,
   });
 }
 
 export function useCreateTransaction() {
+  const ctx = useCtx();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (data: InsertTransaction) => {
-      const validated = api.transactions.create.input.parse(data);
-      const res = await fetch(api.transactions.create.path, {
-        method: api.transactions.create.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(validated),
-        credentials: "include",
-      });
+    mutationFn: async (payload: InsertTransaction & { productId?: string; productQty?: number }) => {
+      if (!ctx) throw new Error("Nao autenticado.");
+      const { productId, productQty, ...rest } = payload as any;
+      const parsed = insertTransactionSchema.parse(rest);
 
-      if (!res.ok) {
-        if (res.status === 400) {
-          const error = await res.json();
-          throw new Error(error.message);
-        }
-        if (res.status === 401) throw new Error("Sessao expirada. Faca login novamente.");
-        throw new Error("Failed to create transaction");
+      if (productId && parsed.type === "income") {
+        const qty = productQty && productQty > 0 ? productQty : 1;
+        await runTransaction(db, async (tx) => {
+          const prodRef = doc(db, "products", String(productId));
+          const prodSnap = await tx.get(prodRef);
+          if (!prodSnap.exists()) throw new Error("Produto nao encontrado.");
+          const prod = prodSnap.data();
+          const currentQty = Number.isFinite(prod.quantity) ? prod.quantity : 0;
+          if (currentQty < qty) throw new Error("Estoque insuficiente ou produto nao encontrado.");
+          tx.update(prodRef, { quantity: currentQty - qty });
+        });
       }
-      return await res.json() as Transaction;
+
+      const storeVal = ctx.role !== "master" && ctx.store ? ctx.store : parsed.store;
+      const base = {
+        description: parsed.description,
+        amount: parsed.amount,
+        type: parsed.type,
+        category: parsed.category ?? null,
+        store: storeVal || null,
+        status: parsed.status,
+        dueDate: parsed.dueDate ?? null,
+        paymentDate: parsed.paymentDate ?? null,
+        isRecurring: parsed.isRecurring,
+        recurrenceFrequency: parsed.recurrenceFrequency ?? null,
+        recurrenceCount: parsed.recurrenceCount ?? null,
+        recurrenceGroupId: parsed.recurrenceGroupId ?? null,
+        date: parsed.date ?? new Date(),
+        userId: ctx.userId,
+        reconciled: 0,
+      };
+
+      if (parsed.isRecurring === 1 && parsed.recurrenceFrequency && (parsed.recurrenceCount || 0) > 1) {
+        const count = parsed.recurrenceCount!;
+        const groupId = crypto.randomUUID();
+        const baseDueDate = parsed.dueDate ? new Date(parsed.dueDate) : new Date();
+        const batch = writeBatch(db);
+        let first: Transaction | null = null;
+
+        for (let i = 0; i < count; i++) {
+          const dueDate = new Date(baseDueDate);
+          if (parsed.recurrenceFrequency === "mensal") dueDate.setMonth(dueDate.getMonth() + i);
+          else if (parsed.recurrenceFrequency === "quinzenal") dueDate.setDate(dueDate.getDate() + i * 15);
+
+          const rowData = {
+            ...base,
+            dueDate,
+            date: i === 0 ? (parsed.date || new Date()) : dueDate,
+            status: i === 0 ? (parsed.status || "pendente") : "pendente",
+            paymentDate: i === 0 ? base.paymentDate : null,
+            isRecurring: 1,
+            recurrenceFrequency: parsed.recurrenceFrequency,
+            recurrenceCount: count,
+            recurrenceGroupId: groupId,
+            description: `${parsed.description} (${i + 1}/${count})`,
+          };
+          const ref = doc(collection(db, "transactions"));
+          batch.set(ref, rowData);
+          if (i === 0) first = { id: ref.id, ...rowData } as unknown as Transaction;
+        }
+        await batch.commit();
+        return first!;
+      }
+
+      const ref = doc(collection(db, "transactions"));
+      await setDoc(ref, base);
+      return { id: ref.id, ...base } as unknown as Transaction;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });
-      queryClient.invalidateQueries({ queryKey: [api.summary.get.path] });
-      toast({
-        title: "Transacao registrada",
-        description: "A movimentacao foi salva com sucesso.",
-      });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
+      toast({ title: "Transacao registrada", description: "A movimentacao foi salva com sucesso." });
     },
-    onError: (error) => {
-      toast({
-        title: "Erro ao salvar",
-        description: error.message,
-        variant: "destructive",
-      });
+    onError: (error: Error) => {
+      toast({ title: "Erro ao salvar", description: error.message, variant: "destructive" });
     },
   });
 }
@@ -72,33 +148,20 @@ export function useUpdateTransaction() {
 
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<InsertTransaction> }) => {
-      const res = await fetch(`/api/transactions/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-        credentials: "include",
-      });
-      if (res.status === 403) throw new Error("Apenas administradores podem editar transacoes.");
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Erro ao atualizar transacao");
+      try {
+        await updateDoc(doc(db, "transactions", id), data as Record<string, any>);
+      } catch (err) {
+        throw new Error(friendlyError(err, "Apenas administradores podem editar transacoes."));
       }
-      return await res.json() as Transaction;
+      const snap = await getDoc(doc(transactionsCol(), id));
+      return snap.data();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });
-      queryClient.invalidateQueries({ queryKey: [api.summary.get.path] });
-      toast({
-        title: "Transacao atualizada",
-        description: "Os dados foram salvos com sucesso.",
-      });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      toast({ title: "Transacao atualizada", description: "Os dados foram salvos com sucesso." });
     },
-    onError: (error) => {
-      toast({
-        title: "Erro",
-        description: error.message,
-        variant: "destructive",
-      });
+    onError: (error: Error) => {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
     },
   });
 }
@@ -109,27 +172,18 @@ export function useDeleteTransaction() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const url = buildUrl(api.transactions.delete.path, { id });
-      const res = await fetch(url, { method: api.transactions.delete.method, credentials: "include" });
-      if (res.status === 403) {
-        throw new Error("Apenas administradores podem excluir transacoes.");
+      try {
+        await deleteDoc(doc(db, "transactions", id));
+      } catch (err) {
+        throw new Error(friendlyError(err, "Apenas administradores podem excluir transacoes."));
       }
-      if (!res.ok && res.status !== 404) throw new Error("Failed to delete transaction");
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });
-      queryClient.invalidateQueries({ queryKey: [api.summary.get.path] });
-      toast({
-        title: "Transacao removida",
-        description: "O registro foi excluido permanentemente.",
-      });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      toast({ title: "Transacao removida", description: "O registro foi excluido permanentemente." });
     },
-    onError: (error) => {
-      toast({
-        title: "Erro",
-        description: error.message,
-        variant: "destructive",
-      });
+    onError: (error: Error) => {
+      toast({ title: "Erro", description: error.message, variant: "destructive" });
     },
   });
 }
@@ -140,21 +194,19 @@ export function useToggleReconciled() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/transactions/${id}/reconcile`, {
-        method: "PATCH",
-        credentials: "include",
-      });
-      if (res.status === 403) throw new Error("Apenas administradores podem conciliar transacoes.");
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Erro ao conciliar");
+      const ref = doc(transactionsCol(), id);
+      const existing = await getDoc(ref);
+      const newVal = existing.data()?.reconciled === 1 ? 0 : 1;
+      try {
+        await updateDoc(doc(db, "transactions", id), { reconciled: newVal });
+      } catch (err) {
+        throw new Error(friendlyError(err, "Apenas administradores podem conciliar transacoes."));
       }
-      return await res.json() as Transaction;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     },
   });
@@ -166,110 +218,116 @@ export function useMarkAsPaid() {
 
   return useMutation({
     mutationFn: async ({ id, paymentDate }: { id: string; paymentDate?: string }) => {
-      const res = await fetch(`/api/transactions/${id}/mark-paid`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentDate }),
-        credentials: "include",
-      });
-      if (res.status === 403) throw new Error("Apenas administradores podem liquidar transacoes.");
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Erro ao liquidar");
+      try {
+        await updateDoc(doc(db, "transactions", id), {
+          status: "pago",
+          paymentDate: paymentDate ? new Date(paymentDate) : new Date(),
+        });
+      } catch (err) {
+        throw new Error(friendlyError(err, "Apenas administradores podem liquidar transacoes."));
       }
-      return await res.json() as Transaction;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });
-      queryClient.invalidateQueries({ queryKey: [api.summary.get.path] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
       toast({ title: "Transacao liquidada", description: "Status atualizado para Pago/Recebido." });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({ title: "Erro", description: error.message, variant: "destructive" });
     },
   });
 }
 
 export function useImportCSV() {
+  const ctx = useCtx();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (rows: any[]) => {
-      const res = await fetch("/api/transactions/import-csv", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rows }),
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Erro ao importar");
+    mutationFn: async (rows: { description: string; amount_cents: number; type: string; date: string; category?: string }[]) => {
+      if (!ctx) throw new Error("Nao autenticado.");
+      let count = 0;
+      for (let i = 0; i < rows.length; i += 500) {
+        const chunk = rows.slice(i, i + 500);
+        const batch = writeBatch(db);
+        for (const row of chunk) {
+          const ref = doc(collection(db, "transactions"));
+          const dateVal = new Date(row.date);
+          batch.set(ref, {
+            description: row.description,
+            amount: Math.abs(Math.round(row.amount_cents)),
+            type: row.type,
+            category: row.category || null,
+            store: ctx.role !== "master" && ctx.store ? ctx.store : null,
+            userId: ctx.userId,
+            date: isNaN(dateVal.getTime()) ? new Date() : dateVal,
+            status: "pago",
+            paymentDate: isNaN(dateVal.getTime()) ? new Date() : dateVal,
+            dueDate: null,
+            isRecurring: 0,
+            recurrenceFrequency: null,
+            recurrenceCount: null,
+            recurrenceGroupId: null,
+            reconciled: 0,
+          });
+          count++;
+        }
+        await batch.commit();
       }
-      return await res.json() as { message: string; count: number };
+      return { message: `${count} transacao(es) importada(s) com sucesso.`, count };
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: [api.transactions.list.path] });
-      queryClient.invalidateQueries({ queryKey: [api.summary.get.path] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
       toast({ title: "Importacao concluida", description: data.message });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({ title: "Erro na importacao", description: error.message, variant: "destructive" });
     },
   });
 }
 
-export function useSummary() {
-  return useQuery({
-    queryKey: [api.summary.get.path],
-    queryFn: async () => {
-      const res = await fetch(api.summary.get.path, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch summary");
-      return api.summary.get.responses[200].parse(await res.json());
-    },
-  });
-}
-
 export function useSettings() {
-  return useQuery({
-    queryKey: [api.settings.get.path],
+  const ctx = useCtx();
+  return useQuery<Settings>({
+    queryKey: ["settings", ctx?.userId],
     queryFn: async () => {
-      const res = await fetch(api.settings.get.path, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch settings");
-      return await res.json() as Settings;
+      if (!ctx) throw new Error("Nao autenticado.");
+      const ref = doc(db, "settings", ctx.userId);
+      let snap = await getDoc(ref);
+      if (!snap.exists()) {
+        await setDoc(ref, { userId: ctx.userId, taxRate: "15" });
+        snap = await getDoc(ref);
+      }
+      const data = snap.data()!;
+      return { id: ctx.userId, userId: data.userId ?? ctx.userId, taxRate: data.taxRate ?? "15" };
     },
+    enabled: !!ctx,
   });
 }
 
 export function useUpdateSettings() {
+  const ctx = useCtx();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
     mutationFn: async (data: InsertSettings) => {
-      const validated = api.settings.update.input.parse(data);
-      const res = await fetch(api.settings.update.path, {
-        method: api.settings.update.method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(validated),
-        credentials: "include",
-      });
-
-      if (res.status === 403) {
-        throw new Error("Apenas administradores podem alterar configuracoes.");
+      if (!ctx) throw new Error("Nao autenticado.");
+      const validated = insertSettingsSchema.parse(data);
+      try {
+        await setDoc(doc(db, "settings", ctx.userId), { userId: ctx.userId, taxRate: validated.taxRate }, { merge: true });
+      } catch (err) {
+        throw new Error(friendlyError(err, "Apenas administradores podem alterar configuracoes."));
       }
-      if (!res.ok) throw new Error("Failed to update settings");
-      return await res.json() as Settings;
+      return { id: ctx.userId, userId: ctx.userId, taxRate: validated.taxRate };
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: [api.settings.get.path] });
-      queryClient.invalidateQueries({ queryKey: [api.summary.get.path] });
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
       toast({
         title: "Configuracoes atualizadas",
         description: "A nova aliquota de imposto foi aplicada.",
       });
     },
-    onError: (error) => {
+    onError: (error: Error) => {
       toast({
         title: "Erro",
         description: error.message,

@@ -1,7 +1,10 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { collection, doc, setDoc, updateDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
-import { formatCurrency } from "@/hooks/use-transactions";
+import { formatCurrency, useCreateTransaction } from "@/hooks/use-transactions";
+import { useProducts } from "@/hooks/use-products";
 import { useToast } from "@/hooks/use-toast";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,18 +40,11 @@ function formatUnit(unit: string): string {
 }
 
 export default function Products() {
-  const { canManage, isOperador } = useAuth();
+  const { canManage, isOperador, user, isMaster, userStore } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  const { data: products = [], isLoading, isError, refetch } = useQuery<Product[]>({
-    queryKey: ["/api/products"],
-    queryFn: async () => {
-      const res = await fetch("/api/products", { credentials: "include" });
-      if (!res.ok) throw new Error("Erro ao carregar produtos");
-      return res.json();
-    },
-  });
+  const { data: products = [], isLoading, isError, refetch } = useProducts();
 
   const [showCreate, setShowCreate] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
@@ -65,20 +61,24 @@ export default function Products() {
 
   const createMutation = useMutation({
     mutationFn: async (data: { name: string; specification?: string; unit: string; store?: string; quantity: number; price: number; createdAt?: string }) => {
-      const res = await fetch("/api/products", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-        credentials: "include",
+      if (!user) throw new Error("Nao autenticado.");
+      const storeVal = !isMaster && userStore ? userStore : (data.store || null);
+      const ref = doc(collection(db, "products"));
+      await setDoc(ref, {
+        name: data.name,
+        specification: data.specification ?? null,
+        unit: data.unit,
+        store: storeVal,
+        quantity: data.quantity,
+        price: data.price,
+        userId: user.id,
+        active: 1,
+        createdAt: data.createdAt ? new Date(data.createdAt) : new Date(),
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Erro ao criar produto");
-      }
-      return { product: await res.json(), input: data };
+      return { input: data };
     },
     onSuccess: ({ input }) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
       toast({ title: "Produto cadastrado", description: "O produto foi adicionado com sucesso." });
       const totalCents = input.quantity * input.price;
       if (totalCents > 0 && input.quantity > 0) {
@@ -89,72 +89,38 @@ export default function Products() {
       setShowCreate(false);
     },
     onError: (err: Error) => {
-      toast({ title: "Erro", description: err.message, variant: "destructive" });
+      toast({ title: "Erro", description: err.message || "Erro ao criar produto", variant: "destructive" });
     },
   });
 
-  const createExpenseMutation = useMutation({
-    mutationFn: async (data: { description: string; amount: number; type: string }) => {
-      const res = await fetch("/api/transactions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Erro ao lancar despesa");
-      }
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
-      toast({ title: "Despesa lancada", description: "A compra foi registrada como saida no financeiro." });
-      setPendingExpense(null);
-      setShowExpenseDialog(false);
-    },
-    onError: (err: Error) => {
-      toast({ title: "Erro", description: err.message, variant: "destructive" });
-      setPendingExpense(null);
-      setShowExpenseDialog(false);
-    },
-  });
+  const createExpenseMutation = useCreateTransaction();
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<{ name: string; specification: string; unit: string; store: string | null; quantity: number; price: number }> }) => {
-      const res = await fetch(`/api/products/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message || "Erro ao atualizar produto");
-      }
-      return res.json();
+      await updateDoc(doc(db, "products", id), data as Record<string, any>);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
       toast({ title: "Produto atualizado", description: "As alteracoes foram salvas." });
       setEditProduct(null);
     },
     onError: (err: Error) => {
-      toast({ title: "Erro", description: err.message, variant: "destructive" });
+      const msg = (err as any)?.code === "permission-denied" ? "Apenas administradores podem editar produtos." : err.message;
+      toast({ title: "Erro", description: msg || "Erro ao atualizar produto", variant: "destructive" });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/products/${id}`, { method: "DELETE", credentials: "include" });
-      if (!res.ok && res.status !== 204) throw new Error("Erro ao remover produto");
+      await updateDoc(doc(db, "products", id), { active: 0 });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
       toast({ title: "Produto removido", description: "O produto foi desativado." });
     },
     onError: (err: Error) => {
-      toast({ title: "Erro", description: err.message, variant: "destructive" });
+      const msg = (err as any)?.code === "permission-denied" ? "Apenas administradores podem remover produtos." : err.message;
+      toast({ title: "Erro", description: msg || "Erro ao remover produto", variant: "destructive" });
     },
   });
 
@@ -654,6 +620,12 @@ export default function Products() {
                     description: `Compra de produto - ${pendingExpense.name} (${pendingExpense.quantity} un.)`,
                     amount: totalCents,
                     type: "expense",
+                    status: "pago",
+                  } as any, {
+                    onSettled: () => {
+                      setPendingExpense(null);
+                      setShowExpenseDialog(false);
+                    },
                   });
                 }
               }}

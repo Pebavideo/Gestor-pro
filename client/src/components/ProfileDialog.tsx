@@ -1,4 +1,6 @@
 import { useState, useEffect } from "react";
+import { doc, updateDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
@@ -30,40 +32,25 @@ export function ProfileDialog() {
   }, [open, user]);
 
   async function handlePhotoUploaded(url: string) {
+    if (!user) return;
     try {
-      const res = await fetch("/api/user/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profileImageUrl: url }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || "Erro ao salvar foto");
-      }
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      await updateDoc(doc(db, "users", user.id), { profileImageUrl: url, updatedAt: new Date() });
+      queryClient.invalidateQueries({ queryKey: ["auth-user"] });
     } catch (err: any) {
-      toast({ title: "Erro", description: err.message, variant: "destructive" });
+      toast({ title: "Erro", description: err.message || "Erro ao salvar foto", variant: "destructive" });
     }
   }
 
   async function handleSave() {
+    if (!user) return;
     setSaving(true);
     try {
-      const res = await fetch("/api/user/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName, lastName, cnpjCpf, companyName }),
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || "Erro ao salvar");
-      }
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
+      await updateDoc(doc(db, "users", user.id), { firstName, lastName, cnpjCpf, companyName, updatedAt: new Date() });
+      queryClient.invalidateQueries({ queryKey: ["auth-user"] });
       toast({ title: "Perfil atualizado", description: "Seus dados foram salvos." });
       setOpen(false);
     } catch (err: any) {
-      toast({ title: "Erro", description: err.message, variant: "destructive" });
+      toast({ title: "Erro", description: err.message || "Erro ao salvar", variant: "destructive" });
     } finally {
       setSaving(false);
     }

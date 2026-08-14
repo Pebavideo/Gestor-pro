@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogScrollArea, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
@@ -11,13 +10,11 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { formatCurrency } from "@/hooks/use-transactions";
-import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { useCreateTransaction } from "@/hooks/use-transactions";
+import { useProducts } from "@/hooks/use-products";
 import { CurrencyInput, parseBRL, formatBRL } from "@/components/CurrencyInput";
 import { Plus, ArrowUpCircle, ArrowDownCircle, Repeat, CalendarClock } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Product } from "@shared/schema";
 import { CATEGORY_OPTIONS, getCategoryLabel, RECURRENCE_OPTIONS, STORE_OPTIONS, getStoreLabel } from "@shared/schema";
 import { useAuth } from "@/hooks/use-auth";
 
@@ -44,43 +41,11 @@ const formSchema = z.object({
 
 export function CreateTransactionDialog() {
   const [open, setOpen] = useState(false);
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
   const { isMaster, userStore } = useAuth();
 
-  const { data: products = [] } = useQuery<Product[]>({
-    queryKey: ["/api/products"],
-    queryFn: async () => {
-      const res = await fetch("/api/products", { credentials: "include" });
-      if (!res.ok) throw new Error("Erro ao carregar produtos");
-      return res.json();
-    },
-  });
+  const { data: products = [] } = useProducts();
 
-  const createMutation = useMutation({
-    mutationFn: async (payload: any) => {
-      const res = await apiRequest("POST", "/api/transactions", payload);
-      return await res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/summary"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
-      toast({
-        title: "Transacao registrada",
-        description: "A movimentacao foi salva com sucesso.",
-      });
-      setOpen(false);
-      form.reset();
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Erro ao salvar",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
+  const createMutation = useCreateTransaction();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -149,7 +114,12 @@ export function CreateTransactionDialog() {
       payload.productQty = parseInt(values.productQty || "1") || 1;
     }
 
-    createMutation.mutate(payload);
+    createMutation.mutate(payload, {
+      onSuccess: () => {
+        setOpen(false);
+        form.reset();
+      },
+    });
   }
 
   function onProductSelect(productId: string) {

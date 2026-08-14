@@ -1,92 +1,66 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { signOut } from "firebase/auth";
-import { auth, authReady } from "@/lib/firebase";
+import { doc, getDoc, setDoc, serverTimestamp } from "firebase/firestore";
+import { auth, authReady, db } from "@/lib/firebase";
+import { usersCol } from "@/lib/firestore-collections";
+import type { User } from "@shared/models/auth";
 
-interface AuthUser {
-  id: string;
-  email: string;
-  firstName: string | null;
-  lastName: string | null;
-  role: string;
-  store: string | null;
-  cnpjCpf: string | null;
-  companyName: string | null;
-  emailVerified: boolean;
-  profileImageUrl: string | null;
-}
-
-async function fetchUser(): Promise<AuthUser | null> {
+async function fetchUser(): Promise<User | null> {
   // Espera o Firebase terminar de restaurar a sessao do IndexedDB antes de
-  // perguntar pro servidor quem esta logado - senao a primeira checagem
-  // sai sem token e o app conclui erroneamente que ninguem esta logado.
+  // ler o perfil - senao a primeira checagem apos reload achataria que
+  // ninguem esta logado.
   await authReady;
-  const response = await fetch("/api/auth/user", {
-    credentials: "include",
-  });
+  const fbUser = auth.currentUser;
+  if (!fbUser) return null;
 
-  if (response.status === 401) {
-    return null;
+  const ref = doc(usersCol(), fbUser.uid);
+  let snap = await getDoc(ref);
+
+  if (!snap.exists()) {
+    // Primeiro login (sempre via Google Sign-In) - ainda nao existe
+    // perfil no Firestore, provisiona agora com os dados que o Google ja
+    // verificou (e-mail, nome, foto).
+    const fullName = (fbUser.displayName || "").trim();
+    const [firstName, ...rest] = fullName ? fullName.split(/\s+/) : [null];
+    await setDoc(doc(db, "users", fbUser.uid), {
+      email: fbUser.email || "",
+      firstName: firstName || null,
+      lastName: rest.length ? rest.join(" ") : null,
+      profileImageUrl: fbUser.photoURL || null,
+      emailVerified: true,
+      role: "operador",
+      store: null,
+      cnpjCpf: null,
+      companyName: null,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+    snap = await getDoc(ref);
   }
 
-  if (!response.ok) {
-    throw new Error(`${response.status}: ${response.statusText}`);
-  }
-
-  return response.json();
-}
-
-interface RoleData {
-  role: string;
-  store: string | null;
-}
-
-async function fetchRole(): Promise<RoleData> {
-  const response = await fetch("/api/user/role", {
-    credentials: "include",
-  });
-
-  if (!response.ok) {
-    // Deixa o react-query registrar isso como erro (data fica undefined) em
-    // vez de fingir que o usuario e "operador" - o fallback pro role real
-    // do useAuth (abaixo) ja cobre esse caso sem precisar inventar um valor.
-    throw new Error("Falha ao buscar cargo do usuario.");
-  }
-
-  return response.json();
+  return snap.data() ?? null;
 }
 
 export function useAuth() {
   const queryClient = useQueryClient();
-  const { data: user, isLoading } = useQuery<AuthUser | null>({
-    queryKey: ["/api/auth/user"],
+  const { data: user, isLoading } = useQuery<User | null>({
+    queryKey: ["auth-user"],
     queryFn: fetchUser,
-    retry: false,
-    staleTime: 1000 * 60 * 5,
-  });
-
-  const { data: roleData } = useQuery<RoleData>({
-    queryKey: ["/api/user/role"],
-    queryFn: fetchRole,
-    enabled: !!user && user.emailVerified,
     retry: false,
     staleTime: 1000 * 60 * 5,
   });
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      // Best-effort: revoga o refresh token no servidor antes de encerrar a
-      // sessao localmente (a fonte da verdade do login e o Firebase Auth).
-      await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
       await signOut(auth);
     },
     onSuccess: () => {
-      queryClient.setQueryData(["/api/auth/user"], null);
-      queryClient.removeQueries({ queryKey: ["/api/user/role"] });
+      queryClient.setQueryData(["auth-user"], null);
     },
   });
 
-  const role = roleData?.role || user?.role || "operador";
-  const userStore = roleData?.store || user?.store || null;
+  const role = user?.role || "operador";
+  const userStore = user?.store || null;
 
   return {
     user,

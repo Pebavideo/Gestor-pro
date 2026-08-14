@@ -56,31 +56,33 @@ Financial management dashboard for businesses. Multi-user system with three-tier
 - 2026-08-13: Migrated database from PostgreSQL/Drizzle to Firebase Firestore
 - 2026-08-13: Migrated authentication from custom bcrypt/session to Firebase Authentication (server still issues the 6-digit verification code UX, backed by Admin SDK)
 - 2026-08-13: Added image compressor + Firebase Storage upload (ImageUploadField), first used for profile photo in ProfileDialog
+- 2026-08-14: Project stays on the Firebase Spark (free) plan - no Cloud Functions/Cloud Run, so no server in production. Rearchitected to 100% client-side: client talks directly to Firestore/Firebase Auth via the Web SDK, `firestore.rules` is now the only access-control layer (was `server/storage.ts`). `server/` (Express) is kept in the repo as dormant/reference code, not part of the deploy.
+- 2026-08-14: Email/password login removed - Google Sign-In is now the only auth method (simpler, and Google already verifies the e-mail, so the custom 6-digit code flow - which required a trusted server - is gone)
+- 2026-08-14: First MASTER user is no longer auto-promoted via API; run `npm run promote-to-master -- <email>` once, locally, after the first login
+- 2026-08-14: Deploy target is Firebase Hosting only (static `dist/public`), no `/api/**` rewrite
 
 ## Architecture
 - **Frontend**: React + Vite + TailwindCSS + shadcn/ui
-- **Backend**: Express.js, stateless (Firebase ID token verified per-request, no server session)
-- **Database**: Firebase Firestore via `firebase-admin` (server-only; client never talks to Firestore directly)
-- **Auth**: Firebase Authentication (email/password). Client signs in via Firebase Web SDK and sends `Authorization: Bearer <idToken>` on every API call (attached automatically by a fetch interceptor in `client/src/lib/firebase.ts`). Server verifies the token with the Admin SDK on each request.
-- **Storage**: Firebase Storage for images, uploads always go through the compressor in `client/src/lib/image-compressor.ts` before `uploadCompressedImage`
+- **Backend**: none in production (Firebase Spark/free plan - no Cloud Functions, no Cloud Run). `server/` (Express) still exists in the repo but is dormant/reference-only, not built or deployed.
+- **Database**: Firebase Firestore, read/written **directly by the client** via the Web SDK (`client/src/lib/firestore-collections.ts`). All access control (who can read/write what) lives in `firestore.rules` - there is no trusted server in the loop anymore.
+- **Auth**: Firebase Authentication, **Google Sign-In only** (`client/src/components/GoogleSignInButton.tsx`, `signInWithPopup` + `prompt: 'select_account'`). No email/password, no verification-code flow - Google already verifies the e-mail.
+- **Storage**: Firebase Storage for images, client-direct, uploads always go through the compressor in `client/src/lib/image-compressor.ts` before `uploadCompressedImage`. Needs "Get Started" clicked once in the Firebase console (Spark-compatible, no billing required).
+- **Deploy**: Firebase Hosting only, serving the static Vite build (`dist/public`) with an SPA fallback rewrite. `firebase deploy --only hosting,firestore:rules,firestore:indexes`.
 
 ### Key Collections (Firestore)
-- `users` (doc id = Firebase Auth uid): email (unique), firstName, lastName, profileImageUrl, emailVerified, verificationCode, verificationCodeExpiresAt (internal, not returned to client), role ('master'|'gerente'|'operador'), cnpjCpf (nullable), companyName (nullable), store (nullable), createdAt, updatedAt
+- `users` (doc id = Firebase Auth uid): email, firstName, lastName, profileImageUrl, emailVerified, role ('master'|'gerente'|'operador'), cnpjCpf (nullable), companyName (nullable), store (nullable), createdAt, updatedAt. Auto-provisioned by the client on first login (`client/src/hooks/use-auth.ts`) from the Google profile (email/displayName/photoURL), defaulting to role "operador".
 - `transactions` (doc id = string): description, amount (cents), type, category (nullable), store (nullable), status (pago/pendente), dueDate (nullable), paymentDate (nullable), isRecurring (0/1), recurrenceFrequency (nullable), recurrenceCount (nullable), recurrenceGroupId (nullable), userId, date, reconciled (0/1)
 - `employees` (doc id = string): name, position, salary (cents), store (default 'fazenda'), userId, active (1/0), createdAt
 - `products` (doc id = string): name, specification (nullable), unit (default 'UN'), quantity, price (cents), userId, active (1/0), createdAt
-- `settings` (doc id = userId): taxRate
-- No `sessions` collection - auth is stateless (Firebase ID tokens), see Auth Flow below.
-- Composite indexes required for the store/role-filtered queries are declared in `firestore.indexes.json` (deploy with `firebase deploy --only firestore:indexes`, or let Firestore's console link auto-create them on first query).
+- `settings` (doc id = userId): taxRate. Each user has their own settings doc (pre-existing behavior kept as-is - only MASTER can update, but each user's doc is independent).
+- Composite indexes for the store/role-filtered queries are declared in `firestore.indexes.json` (deploy with `firebase deploy --only firestore:indexes`).
 
 ### Auth Flow
-1. User registers with email, password, name - server creates the Firebase Auth user (Admin SDK, `emailVerified:false`) and stores a 6-digit code on the Firestore user doc (printed to server console for testing)
-2. Client immediately signs in with Firebase Web SDK using the same password, establishing a real Firebase session (auto-refreshing ID tokens)
-3. User enters the 6-digit code; server validates it and flips `emailVerified:true` via Admin SDK; client force-refreshes its ID token so the new claim takes effect immediately
-4. Once verified, user can access the dashboard
-5. First verified user is auto-promoted to MASTER (`/api/user/make-admin`)
-6. Login is done entirely client-side via Firebase Web SDK (`signInWithEmailAndPassword`) - the server never sees the password
-7. Logout calls `signOut()` client-side and best-effort revokes refresh tokens server-side
+1. User clicks "Entrar com Google" - `signInWithPopup` (Firebase Web SDK), account picker forced via `prompt: 'select_account'`
+2. On first login ever, `fetchUser()` in `use-auth.ts` finds no `users/{uid}` doc and creates one from the Google profile (`emailVerified: true`, `role: "operador"`)
+3. First MASTER is a manual one-time step: `npm run promote-to-master -- <email>` (local script, uses the Admin SDK service account from `.env`, not deployed)
+4. Logout calls `signOut()` client-side
+5. All subsequent reads/writes go straight to Firestore from the client; `firestore.rules` enforces the MASTER/GERENTE/OPERADOR + store rules that used to live in `server/storage.ts`
 
 ### Store-Based Data Isolation
 - MASTER sees all stores' data (no store filtering)
@@ -103,31 +105,34 @@ Financial management dashboard for businesses. Multi-user system with three-tier
 ## Project Structure
 - `client/src/` - React frontend (all Portuguese)
 - `client/src/App.tsx` - Main app with sidebar navigation, role-based visibility
-- `client/src/pages/AuthPage.tsx` - Login/Register/Verify unified auth page (Firebase Auth underneath)
-- `client/src/pages/Dashboard.tsx` - Financial dashboard with month filter, CSV import, reconciliation
+- `client/src/pages/AuthPage.tsx` - Single "Entrar com Google" screen
+- `client/src/pages/Dashboard.tsx` - Financial dashboard with month filter, CSV import, reconciliation, dynamic greeting
 - `client/src/pages/DRE.tsx` - DRE income statement with filters, OPERADOR blocked
 - `client/src/pages/Products.tsx` - Product/inventory management
 - `client/src/pages/TeamManagement.tsx` - Employee management with store assignment and payroll
+- `client/src/components/GoogleSignInButton.tsx` - Google Sign-In popup button, handles cancel/blocked-popup gracefully
 - `client/src/components/ProfileDialog.tsx` - User profile editing
 - `client/src/components/ImageUploadField.tsx` - Compress + upload image component
 - `client/src/components/UserManagementDialog.tsx` - User role/store management (MASTER only)
-- `client/src/hooks/use-auth.ts` - Auth hook with isMaster/isGerente/isOperador/canManage flags
-- `client/src/lib/firebase.ts` - Firebase Web SDK init + global fetch interceptor (attaches Bearer token)
+- `client/src/hooks/use-auth.ts` - Auth hook (isMaster/isGerente/isOperador/canManage) + first-login profile auto-provisioning
+- `client/src/hooks/use-transactions.ts` - All transaction/settings reads+writes direct to Firestore (react-query wrapped)
+- `client/src/hooks/use-products.ts` - Shared products query (used by Products.tsx and CreateTransactionDialog.tsx)
+- `client/src/lib/firebase.ts` - Firebase Web SDK init (`auth`, `db`, `storage`, `googleProvider`)
+- `client/src/lib/firestore-collections.ts` - Typed Firestore converters/collection refs, mirrors the old `server/storage.ts` document shapes
 - `client/src/lib/image-compressor.ts` - Client-side image compression (browser-image-compression)
 - `client/src/lib/firebase-storage.ts` - Uploads compressed images to Firebase Storage
-- `server/firebase.ts` - Firebase Admin SDK init (Firestore, Auth, Storage)
-- `server/auth.ts` - Firebase Authentication wiring (register/verify/resend/logout routes, bearer-token middleware)
-- `server/routes.ts` - Business API routes with role-based middleware
-- `server/storage.ts` - Firestore storage layer with UserContext filtering
-- `shared/schema.ts` - Entity types + zod insert schemas + STORE_OPTIONS + CATEGORY_OPTIONS
-- `shared/models/auth.ts` - User type + getRoleLabel
-- `firestore.rules` / `storage.rules` / `firestore.indexes.json` / `firebase.json` - Firebase project config
+- `firestore.rules` - **the access-control layer** (role/store filtering that used to live in `server/storage.ts`)
+- `storage.rules` / `firestore.indexes.json` / `firebase.json` - rest of the Firebase project config
+- `script/promote-to-master.ts` - one-time local script to bootstrap the first MASTER user
+- `server/` - dormant Express backend, kept as reference only, not part of the deploy
 
 ## Environment Variables
-See `.env.example`. Loaded from a local `.env` (via `dotenv`) - required for both server (Admin SDK) and client (Vite `VITE_FIREBASE_*`, see `envDir` in `vite.config.ts`):
-- `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` - Admin SDK service account
-- `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID` - Web SDK config (public)
+See `.env.example`. Loaded from a local `.env` (via `dotenv`):
+- `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, `VITE_FIREBASE_STORAGE_BUCKET`, `VITE_FIREBASE_MESSAGING_SENDER_ID`, `VITE_FIREBASE_APP_ID` - Web SDK config (public, baked into the client build)
+- `FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` - Admin SDK service account, only needed locally to run `script/promote-to-master.ts` (or the dormant `server/`)
 
 ## Running
-- `npm run dev` starts Express + Vite on port 5000
-- No schema push step - Firestore is schemaless; deploy indexes/rules with the Firebase CLI (`firebase deploy --only firestore:indexes,firestore:rules,storage`) when needed
+- `npm run dev` starts the Vite dev client on port 5000 (talks directly to the real Firebase project - there's no local backend to also start)
+- `npm run build` builds the static client to `dist/public`
+- `npm run promote-to-master -- <email>` bootstraps the first MASTER, once, after that account's first login
+- Deploy: `firebase deploy --only hosting,firestore:rules,firestore:indexes`

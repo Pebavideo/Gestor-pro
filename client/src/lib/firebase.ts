@@ -1,5 +1,7 @@
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth, onIdTokenChanged, GoogleAuthProvider } from "firebase/auth";
+import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 import { queryClient } from "./queryClient";
 
 const firebaseConfig = {
@@ -15,6 +17,12 @@ const app = getApps().length ? getApps()[0]! : initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 
+// Sem servidor (plano Spark): o client fala direto com o Firestore/Storage,
+// autorizacao garantida pelas regras de seguranca (firestore.rules /
+// storage.rules), nao mais por um backend confiavel.
+export const db = getFirestore(app);
+export const storage = getStorage(app);
+
 // Provider de "Entrar com Google" - forca a tela de selecao de conta
 // sempre (mesmo que so haja uma conta logada no navegador), para o
 // usuario nunca ficar preso na ultima conta usada.
@@ -22,37 +30,15 @@ export const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: "select_account" });
 
 // Promise que resolve assim que o Firebase termina de restaurar (ou nao) a
-// sessao persistida no IndexedDB. No primeiro load da pagina, auth.currentUser
-// comeca como null mesmo com uma sessao valida - sem esperar isso, a
-// primeira chamada a /api/auth/user sai sem token, volta 401, e o app
-// deduz "deslogado" antes do Firebase terminar de restaurar a sessao real.
+// sessao persistida no IndexedDB. No primeiro load da pagina,
+// auth.currentUser comeca como null mesmo com uma sessao valida - sem
+// esperar isso, a primeira leitura do perfil sairia sem usuario e o app
+// deduziria "deslogado" antes do Firebase terminar de restaurar a sessao.
 export const authReady = auth.authStateReady();
 
 // Sempre que o token mudar (login, logout, refresh automatico, ou a
 // restauracao inicial da sessao), busca de novo os dados de auth - assim o
 // app nunca fica "preso" mostrando o estado de antes da mudanca.
 onIdTokenChanged(auth, () => {
-  queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-  queryClient.invalidateQueries({ queryKey: ["/api/user/role"] });
+  queryClient.invalidateQueries({ queryKey: ["auth-user"] });
 });
-
-// Todas as telas/hooks do app usam fetch("/api/...") diretamente (nao passam
-// por um wrapper unico). Para nao precisar alterar cada chamada, interceptamos
-// o fetch global e anexamos "Authorization: Bearer <idToken>" em toda
-// requisicao para a nossa API quando ha um usuario logado.
-const originalFetch = window.fetch.bind(window);
-
-window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-  const url = typeof input === "string" ? input : input instanceof Request ? input.url : input.toString();
-
-  if (url.startsWith("/api")) {
-    const token = auth.currentUser ? await auth.currentUser.getIdToken() : null;
-    if (token) {
-      const headers = new Headers(init?.headers);
-      headers.set("Authorization", `Bearer ${token}`);
-      return originalFetch(input, { ...init, headers });
-    }
-  }
-
-  return originalFetch(input, init);
-};

@@ -3,6 +3,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import {
+  collection, doc, getDoc, getDocs, setDoc, updateDoc,
+  query, where, orderBy, writeBatch,
+} from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { employeesCol } from "@/lib/firestore-collections";
 import { useAuth } from "@/hooks/use-auth";
 import { formatCurrency } from "@/hooks/use-transactions";
 import { useToast } from "@/hooks/use-toast";
@@ -36,14 +42,30 @@ const employeeFormSchema = z.object({
 type EmployeeFormData = z.infer<typeof employeeFormSchema>;
 
 function useEmployees() {
+  const { user, isMaster, userStore } = useAuth();
   return useQuery<Employee[]>({
-    queryKey: ["/api/employees"],
+    queryKey: ["employees", user?.id, isMaster, userStore],
     queryFn: async () => {
-      const res = await fetch("/api/employees", { credentials: "include" });
-      if (!res.ok) throw new Error("Erro ao carregar funcionarios");
-      return res.json();
+      if (!user) return [];
+      const clauses = [where("userId", "==", user.id), where("active", "==", 1)];
+      if (!isMaster && userStore) clauses.push(where("store", "==", userStore));
+      const q = query(employeesCol(), ...clauses, orderBy("createdAt", "desc"));
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => d.data());
     },
+    enabled: !!user,
   });
+}
+
+const MONTH_NAMES_PT = [
+  "Janeiro", "Fevereiro", "Marco", "Abril", "Maio", "Junho",
+  "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro",
+];
+
+function getPaymentDescription(empName: string, salaryType: string): string {
+  const now = new Date();
+  const typeLabel = salaryType === "daily" ? "Diaria" : "Mensal";
+  return `Pagamento ${empName} - ${typeLabel} - Referente a ${MONTH_NAMES_PT[now.getMonth()]}/${now.getFullYear()}`;
 }
 
 function EmployeesErrorState({ onRetry }: { onRetry: () => void }) {
@@ -62,7 +84,7 @@ function EmployeesErrorState({ onRetry }: { onRetry: () => void }) {
 }
 
 export default function TeamManagement() {
-  const { isMaster, isGerente, isOperador, userStore, canManage } = useAuth();
+  const { isMaster, isGerente, isOperador, userStore, canManage, user } = useAuth();
   const { data: employees, isLoading, isError, refetch } = useEmployees();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -93,26 +115,23 @@ export default function TeamManagement() {
 
   const createMutation = useMutation({
     mutationFn: async (data: EmployeeFormData) => {
+      if (!user) throw new Error("Nao autenticado.");
       const salaryInCents = Math.round(parseBRL(data.salary) * 100);
       const store = isMaster ? formStore : (userStore || "fazenda");
-      const payload: any = { name: data.name, position: data.position, salary: salaryInCents, salaryType, store };
-      if (admissionDate) {
-        payload.createdAt = new Date(admissionDate).toISOString();
-      }
-      const res = await fetch("/api/employees", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        credentials: "include",
+      const ref = doc(collection(db, "employees"));
+      await setDoc(ref, {
+        name: data.name,
+        position: data.position,
+        salary: salaryInCents,
+        salaryType,
+        store,
+        userId: user.id,
+        active: 1,
+        createdAt: admissionDate ? new Date(admissionDate) : new Date(),
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message);
-      }
-      return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      queryClient.invalidateQueries({ queryKey: ["employees"] });
       toast({ title: "Funcionario cadastrado", description: "O funcionario foi adicionado com sucesso." });
       createForm.reset();
       setAdmissionDate("");
@@ -128,62 +147,71 @@ export default function TeamManagement() {
   const editMutation = useMutation({
     mutationFn: async ({ id, data }: { id: string; data: EmployeeFormData }) => {
       const salaryInCents = Math.round(parseBRL(data.salary) * 100);
-      const res = await fetch(`/api/employees/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: data.name, position: data.position, salary: salaryInCents, salaryType: editSalaryType, store: editStore }),
-        credentials: "include",
+      await updateDoc(doc(db, "employees", id), {
+        name: data.name,
+        position: data.position,
+        salary: salaryInCents,
+        salaryType: editSalaryType,
+        store: editStore,
       });
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.message);
-      }
-      return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      queryClient.invalidateQueries({ queryKey: ["employees"] });
       toast({ title: "Funcionario atualizado", description: "Os dados foram salvos com sucesso." });
       setEditingEmployee(null);
     },
-    onError: (error: Error) => {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    onError: (error: any) => {
+      const msg = error?.code === "permission-denied" ? "Apenas administradores podem editar funcionarios." : error.message;
+      toast({ title: "Erro", description: msg, variant: "destructive" });
     },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      const res = await fetch(`/api/employees/${id}`, {
-        method: "DELETE",
-        credentials: "include",
-      });
-      if (!res.ok && res.status !== 204) {
-        const err = await res.json();
-        throw new Error(err.message);
-      }
+      await updateDoc(doc(db, "employees", id), { active: 0 });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
+      queryClient.invalidateQueries({ queryKey: ["employees"] });
       toast({ title: "Funcionario removido", description: "O registro foi desativado." });
     },
-    onError: (error: Error) => {
-      toast({ title: "Erro", description: error.message, variant: "destructive" });
+    onError: (error: any) => {
+      const msg = error?.code === "permission-denied" ? "Apenas administradores podem remover funcionarios." : error.message;
+      toast({ title: "Erro", description: msg, variant: "destructive" });
     },
   });
 
   const payrollMutation = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/employees/payroll", {
-        method: "POST",
-        credentials: "include",
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.message);
-      return json;
+      if (!user) throw new Error("Nao autenticado.");
+      const activeEmployees = employees || [];
+      if (activeEmployees.length === 0) throw new Error("Nenhum funcionario cadastrado para processar folha de pagamento.");
+      const batch = writeBatch(db);
+      for (const emp of activeEmployees) {
+        const ref = doc(collection(db, "transactions"));
+        batch.set(ref, {
+          description: getPaymentDescription(emp.name, emp.salaryType),
+          amount: emp.salary,
+          type: "expense",
+          category: "salarios",
+          store: emp.store,
+          status: "pago",
+          dueDate: null,
+          paymentDate: new Date(),
+          isRecurring: 0,
+          recurrenceFrequency: null,
+          recurrenceCount: null,
+          recurrenceGroupId: null,
+          userId: user.id,
+          date: new Date(),
+          reconciled: 0,
+        });
+      }
+      await batch.commit();
+      return { message: `Folha de pagamento processada. ${activeEmployees.length} lancamento(s) criado(s).` };
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/summary"] });
+      queryClient.invalidateQueries({ queryKey: ["employees"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
       toast({ title: "Folha processada", description: data.message });
     },
     onError: (error: Error) => {
@@ -193,17 +221,31 @@ export default function TeamManagement() {
 
   const payEmployeeMutation = useMutation({
     mutationFn: async (employeeId: string) => {
-      const res = await fetch(`/api/employees/${employeeId}/pay`, {
-        method: "POST",
-        credentials: "include",
+      if (!user) throw new Error("Nao autenticado.");
+      const snap = await getDoc(doc(employeesCol(), employeeId));
+      if (!snap.exists()) throw new Error("Funcionario nao encontrado");
+      const emp = snap.data();
+      await setDoc(doc(collection(db, "transactions")), {
+        description: getPaymentDescription(emp.name, emp.salaryType),
+        amount: emp.salary,
+        type: "expense",
+        category: "salarios",
+        store: emp.store,
+        status: "pago",
+        dueDate: null,
+        paymentDate: new Date(),
+        isRecurring: 0,
+        recurrenceFrequency: null,
+        recurrenceCount: null,
+        recurrenceGroupId: null,
+        userId: user.id,
+        date: new Date(),
+        reconciled: 0,
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.message);
-      return json;
+      return { message: "Pagamento lancado para o funcionario." };
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/summary"] });
+      queryClient.invalidateQueries({ queryKey: ["transactions"] });
       toast({ title: "Pagamento lancado", description: data.message });
     },
     onError: (error: Error) => {

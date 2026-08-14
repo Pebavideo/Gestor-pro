@@ -1,5 +1,9 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { doc, getDocs, orderBy, query, updateDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { usersCol } from "@/lib/firestore-collections";
+import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogScrollArea, DialogTrigger } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -7,49 +11,34 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UsersRound } from "lucide-react";
 import { STORE_OPTIONS, getStoreLabel } from "@shared/schema";
-import { getRoleLabel } from "@shared/models/auth";
-
-interface ManagedUser {
-  id: string;
-  email: string;
-  firstName: string | null;
-  lastName: string | null;
-  role: string;
-  store: string | null;
-  emailVerified: boolean;
-}
+import type { User } from "@shared/models/auth";
 
 export function UserManagementDialog() {
   const { toast } = useToast();
+  const { user: me } = useAuth();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
 
-  const { data: allUsers = [], isLoading } = useQuery<ManagedUser[]>({
-    queryKey: ["/api/users"],
+  const { data: allUsers = [], isLoading } = useQuery<User[]>({
+    queryKey: ["users-list"],
     queryFn: async () => {
-      const res = await fetch("/api/users", { credentials: "include" });
-      if (!res.ok) throw new Error("Erro ao carregar usuarios");
-      return res.json();
+      const q = query(usersCol(), orderBy("createdAt", "desc"));
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => d.data());
     },
     enabled: open,
   });
 
   async function updateUserRole(userId: string, role: string, store: string | null) {
     try {
-      const res = await fetch("/api/user/role", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, role, store }),
-        credentials: "include",
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message);
+      await updateDoc(doc(db, "users", userId), { role, store, updatedAt: new Date() });
+      queryClient.invalidateQueries({ queryKey: ["users-list"] });
+      if (userId === me?.id) {
+        queryClient.invalidateQueries({ queryKey: ["auth-user"] });
       }
-      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
       toast({ title: "Usuario atualizado", description: "Cargo e unidade salvos." });
     } catch (err: any) {
-      toast({ title: "Erro", description: err.message, variant: "destructive" });
+      toast({ title: "Erro", description: err.message || "Erro ao atualizar usuario", variant: "destructive" });
     }
   }
 

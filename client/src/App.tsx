@@ -1,6 +1,6 @@
 import { Switch, Route, useLocation, Link } from "wouter";
 import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
@@ -35,7 +35,6 @@ import { SettingsDialog } from "@/components/SettingsDialog";
 import { ProfileDialog } from "@/components/ProfileDialog";
 import { UserManagementDialog } from "@/components/UserManagementDialog";
 import { SiteFooter } from "@/components/SiteFooter";
-import { useEffect } from "react";
 import { getStoreLabel } from "@shared/schema";
 import { getRoleLabel } from "@shared/models/auth";
 
@@ -140,21 +139,11 @@ function AppSidebar() {
 }
 
 function AppLayout() {
-  const qc = useQueryClient();
-
-  useEffect(() => {
-    async function tryPromote() {
-      try {
-        const res = await fetch("/api/user/make-admin", { method: "PATCH", credentials: "include" });
-        const data = await res.json();
-        if (res.ok && data.role === "master") {
-          qc.invalidateQueries({ queryKey: ["/api/user/role"] });
-          qc.invalidateQueries({ queryKey: ["/api/auth/user"] });
-        }
-      } catch {}
-    }
-    tryPromote();
-  }, []);
+  // O primeiro usuario master nao e mais auto-promovido por uma rota de
+  // API (nao ha servidor confiavel pra isso sem abrir uma brecha de
+  // seguranca nas regras do Firestore). Rode
+  // "npm run promote-to-master -- <email>" uma vez, localmente, apos o
+  // primeiro login.
 
   const style = {
     "--sidebar-width": "16rem",
